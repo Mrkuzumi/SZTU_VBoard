@@ -1,0 +1,11 @@
+# Place this file as makefile.targets in the root of an STM32CubeIDE project.
+# IMPORTANT: recipe indentation must be a TAB, not spaces.
+# Change VSTM32_ROOT once to the directory where this VirtualSTM32 project lives.
+
+VSTM32_ROOT := C:/Tools/VirtualSTM32F103C8T6
+
+main-build: virtual-stm32-launch
+
+.PHONY: virtual-stm32-launch
+virtual-stm32-launch: $(BUILD_ARTIFACT)
+	cmd /c "\"$(VSTM32_ROOT)/tools/ide_launch.cmd\" \"$(abspath $(BUILD_ARTIFACT))\""

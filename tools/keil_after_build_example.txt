@@ -1,0 +1,11 @@
+Keil µVision 5 -> Options for Target -> User -> After Build/Rebuild -> Run #1
+
+Recommended command (adjust only the VirtualSTM32 installation path):
+
+"C:\Tools\VirtualSTM32F103C8T6\tools\ide_launch.cmd" "#L"
+
+Keil key sequences combine a Key Code with a File Code. `#` means full path and `L` means
+the linker output file, so `#L` passes the complete AXF/ELF path. ide_launch.cmd also keeps
+a recursive fallback in case an older/project-specific setup passes only a file name.
+
+VirtualSTM32 accepts both .elf and .axf.
