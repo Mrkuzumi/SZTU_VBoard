@@ -1,0 +1,137 @@
+#include "backend/RenodeProcess.h"
+#include <fstream>
+#include <sstream>
+#include <utility>
+#include <vector>
+#include <cstdlib>
+
+RenodeProcess::~RenodeProcess() { Stop(); }
+
+std::filesystem::path RenodeProcess::FindRenode(const std::filesystem::path& appDir,
+                                                 const std::filesystem::path& explicitRenode)
+{
+    if(!explicitRenode.empty() && std::filesystem::exists(explicitRenode)) return explicitRenode;
+    if(const wchar_t* env = _wgetenv(L"RENODE_PATH")) {
+        std::filesystem::path p(env);
+        if(std::filesystem::is_directory(p)) p /= "renode.exe";
+        if(std::filesystem::exists(p)) return p;
+    }
+    // Development layout: EXE is usually build\Release\VirtualSTM32.exe while
+    // setup_renode.ps1 installs at project_root\third_party\renode. Search upward
+    // so both an installed bundle and the source-tree build work without extra env vars.
+    std::filesystem::path cursor = appDir;
+    for(int i = 0; i < 4; ++i) {
+        auto portable = cursor / "third_party" / "renode" / "renode.exe";
+        if(std::filesystem::exists(portable)) return portable;
+        if(!cursor.has_parent_path()) break;
+        auto parent = cursor.parent_path();
+        if(parent == cursor) break;
+        cursor = parent;
+    }
+    return L"renode.exe"; // rely on PATH
+}
+
+std::wstring RenodeProcess::Quote(const std::filesystem::path& p)
+{
+    return L"\"" + p.wstring() + L"\"";
+}
+
+std::string RenodeProcess::RenodePath(const std::filesystem::path& p)
+{
+    std::string s = std::filesystem::absolute(p).generic_u8string();
+    std::string out;
+    for(char c : s) {
+        if(c == ' ') out += "\\ ";
+        else out.push_back(c);
+    }
+    return "@" + out;
+}
+
+bool RenodeProcess::WriteRuntimeScript(const std::filesystem::path& elf,
+                                       const std::filesystem::path& appDir,
+                                       std::string& error)
+{
+    char temp[MAX_PATH]{};
+    GetTempPathA(MAX_PATH, temp);
+    auto tempDir = std::filesystem::path(temp) / "VirtualSTM32";
+    std::error_code ec;
+    std::filesystem::create_directories(tempDir, ec);
+    runtimeScript_ = tempDir / "runtime.resc";
+
+    std::ofstream f(runtimeScript_);
+    if(!f) { error = "Cannot create temporary Renode script: " + runtimeScript_.u8string(); return false; }
+
+    const auto bridge = appDir / "renode" / "ssd1306_bridge.py";
+    const auto board = appDir / "renode" / "teaching_board.repl";
+    if(!std::filesystem::exists(board)) {
+        error = "Missing Renode board description: " + board.u8string();
+        return false;
+    }
+    if(!std::filesystem::exists(bridge)) {
+        error = "Missing SSD1306 bridge: " + bridge.u8string();
+        return false;
+    }
+
+    f << "using sysbus\n";
+    f << "mach create \"vstm32\"\n";
+    f << "machine LoadPlatformDescription " << RenodePath(board) << "\n";
+    // Explicitly release all inverted buttons so PB12..PB15 begin HIGH.
+    f << "gpioPortB.key0 Release\n";
+    f << "gpioPortB.key1 Release\n";
+    f << "gpioPortB.key2 Release\n";
+    f << "gpioPortB.key3 Release\n";
+    f << "include " << RenodePath(bridge) << "\n";
+    f << "sysbus LoadELF " << RenodePath(elf) << "\n";
+    f << "start\n";
+    return true;
+}
+
+bool RenodeProcess::Start(const std::filesystem::path& elf,
+                          const std::filesystem::path& appDir,
+                          const std::filesystem::path& explicitRenode,
+                          int monitorPort,
+                          std::string& error)
+{
+    Stop();
+    if(!std::filesystem::exists(elf)) { error = "ELF file does not exist: " + elf.u8string(); return false; }
+    if(!WriteRuntimeScript(elf, appDir, error)) return false;
+
+    auto renode = FindRenode(appDir, explicitRenode);
+    std::wostringstream cmd;
+    cmd << Quote(renode) << L" -P " << monitorPort
+        << L" -p --disable-gui --hide-log --hide-analyzers " << Quote(runtimeScript_);
+
+    STARTUPINFOW si{};
+    si.cb = sizeof(si);
+    std::wstring command = cmd.str();
+    std::vector<wchar_t> mutableCmd(command.begin(), command.end());
+    mutableCmd.push_back(L'\0');
+
+    const std::wstring workingDir = appDir.wstring();
+    BOOL ok = CreateProcessW(nullptr, mutableCmd.data(), nullptr, nullptr, FALSE,
+                             CREATE_NO_WINDOW, nullptr, workingDir.c_str(), &si, &pi_);
+    if(!ok) {
+        error = "Failed to launch Renode. Install Renode or run tools/setup_renode.ps1. Windows error=" + std::to_string(GetLastError());
+        ZeroMemory(&pi_, sizeof(pi_));
+        return false;
+    }
+    return true;
+}
+
+void RenodeProcess::Stop()
+{
+    if(pi_.hProcess) {
+        if(WaitForSingleObject(pi_.hProcess, 0) == WAIT_TIMEOUT) {
+            TerminateProcess(pi_.hProcess, 0);
+            WaitForSingleObject(pi_.hProcess, 1000);
+        }
+        CloseHandle(pi_.hThread);
+        CloseHandle(pi_.hProcess);
+        ZeroMemory(&pi_, sizeof(pi_));
+    }
+}
+
+bool RenodeProcess::Running() const
+{
+    return pi_.hProcess && WaitForSingleObject(pi_.hProcess, 0) == WAIT_TIMEOUT;
+}

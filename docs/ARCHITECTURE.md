@@ -1,4 +1,4 @@
-# Architecture
+# Architecture (V0.1.1)
 
 ```text
 CubeIDE / Keil5
@@ -8,34 +8,72 @@ CubeIDE / Keil5
  tools/ide_launch.cmd
      |
      v
-VirtualSTM32.exe (SDL2)
-     |                    ^
-     | Monitor TCP        | %TEMP%/VirtualSTM32/oled.bin
-     v                    |
-Renode -------------------+
-  Cortex-M3 / NVIC / SysTick
-  STM32F1 GPIOA/B/C
-  STM32F1 I2C1
-  |
-  +-- LED0..3 (GPIO output observers)
-  +-- KEY0..3 (Renode Button -> GPIO input)
-  +-- DummyI2CSlave 0x3C
-          |
-          +-- ssd1306_bridge.py -> 1024-byte framebuffer
+VirtualSTM32.exe
+     |
+     +-- app/App                  application lifecycle only
+     |
+     +-- board/TeachingBoard     board composition / module registry
+     |       |
+     |       +-- IPeripheral
+     |            +-- LedPeripheral
+     |            +-- ButtonPeripheral
+     |            +-- Ssd1306Peripheral
+     |
+     +-- backend/
+     |       +-- RenodeProcess
+     |       +-- MonitorClient
+     |
+     +-- ui/TextureCache
+             |
+             v
+          SDL2 GUI
+
+VirtualSTM32.exe <---- monitor TCP ----> Renode
+                                      Cortex-M3 / NVIC / SysTick
+                                      STM32F1 GPIO / I2C1
+                                      |
+                                      +-- LED observers
+                                      +-- Button inputs
+                                      +-- DummyI2CSlave 0x3C
+                                               |
+                                               +-- ssd1306_bridge.py
+                                                   -> %TEMP%/VirtualSTM32/oled.bin
 ```
 
-## Why this split
+## Module rule
 
-NVBoard 的价值在“可视化外设 + 信号连接”，而 STM32 固件还需要 CPU/寄存器/中断/定时器模型。Renode 负责 MCU 仿真，VirtualSTM32 只负责用户能看到和点击的“桌面开发板”。
+`App` is not allowed to know how an LED, button, OLED, UART or future peripheral works.
+It only forwards lifecycle events to `TeachingBoard`.
 
-## Extension points
+Every user-visible board peripheral implements `IPeripheral`:
 
-以后增加：
+- `Initialize()` — load resources / create textures
+- `OnBackendConnected()` — establish initial MCU-facing state
+- `OnReset()` — reset module state
+- `HandleEvent()` — mouse/keyboard input
+- `Poll()` — read backend state or framebuffer
+- `Render()` — draw itself
 
-- UART：Renode socket terminal + GUI terminal component
-- SPI TFT：SPI peripheral model + framebuffer
-- ADC：slider/knob -> virtual analog value
-- PWM：GPIO/timer observer -> LED brightness/servo angle
-- EXTI：现有 Button/GPIO 链路可继续使用
-- GDB：将 Renode GDB server 包装成 IDE Debug Launch 或 GUI Debug panel
-- board.json：把当前 `BoardConfig.h` 改为运行时板卡描述，实现多个教学板 profile
+To add a new peripheral, prefer:
+
+1. Create `src/peripherals/NewPeripheral.{h,cpp}`.
+2. Implement `IPeripheral`.
+3. Add its board binding/configuration.
+4. Register it in `TeachingBoard::BuildDefaultPeripherals()`.
+5. If Renode needs a device model, add it under `renode/`.
+6. Add/update a scripted patch under `tools/patches/` for existing checkouts.
+
+Do not put new peripheral-specific logic back into `App.cpp`.
+
+## Build/tooling rule
+
+Windows is the primary development and validation platform because Keil5 integration is a core feature.
+Linux may later be used for CI/static checks and a future port.
+
+The build scripts explicitly choose a Visual Studio CMake generator. They must not rely on the user's ambient `CMAKE_GENERATOR`, because an inherited `NMake Makefiles` value caused the V0.1.0 `-A x64` failure.
+
+Before debugging a build environment, run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\doctor.ps1
+```

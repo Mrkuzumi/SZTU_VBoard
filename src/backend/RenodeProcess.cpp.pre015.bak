@@ -1,0 +1,243 @@
+﻿#include "backend/RenodeProcess.h"
+#include <fstream>
+#include <sstream>
+#include <utility>
+#include <vector>
+#include <cstdlib>
+
+RenodeProcess::~RenodeProcess() { Stop(); }
+
+std::filesystem::path RenodeProcess::FindRenode(const std::filesystem::path& appDir,
+                                                 const std::filesystem::path& explicitRenode)
+{
+    if(!explicitRenode.empty() && std::filesystem::exists(explicitRenode)) return explicitRenode;
+
+    if(const wchar_t* env = _wgetenv(L"RENODE_PATH")) {
+        std::filesystem::path p(env);
+        if(std::filesystem::is_directory(p)) p /= "renode.exe";
+        if(std::filesystem::exists(p)) return p;
+    }
+
+    std::filesystem::path cursor = appDir;
+    for(int i = 0; i < 5; ++i) {
+        auto portable = cursor / "third_party" / "renode" / "renode.exe";
+        if(std::filesystem::exists(portable)) return portable;
+
+        if(!cursor.has_parent_path()) break;
+        const auto parent = cursor.parent_path();
+        if(parent == cursor) break;
+        cursor = parent;
+    }
+
+    return L"renode.exe";
+}
+
+std::wstring RenodeProcess::Quote(const std::filesystem::path& p)
+{
+    return L"\"" + p.wstring() + L"\"";
+}
+
+std::string RenodeProcess::RenodePath(const std::filesystem::path& p)
+{
+    // Renode ReadFilePath syntax accepts @ followed by a forward-slash path.
+    // Quote the path rather than relying on backslash-escaped spaces.
+    std::string s = std::filesystem::absolute(p).generic_u8string();
+    std::string escaped;
+    escaped.reserve(s.size() + 8);
+    for(char c : s) {
+        if(c == '"') escaped += "\\\"";
+        else escaped.push_back(c);
+    }
+    return "@\"" + escaped + "\"";
+}
+
+bool RenodeProcess::WriteRuntimeScript(const std::filesystem::path& elf,
+                                       const std::filesystem::path& appDir,
+                                       std::string& error)
+{
+    char temp[MAX_PATH]{};
+    if(GetTempPathA(MAX_PATH, temp) == 0) {
+        error = "GetTempPathA failed.";
+        return false;
+    }
+
+    auto tempDir = std::filesystem::path(temp) / "VirtualSTM32";
+    std::error_code ec;
+    std::filesystem::create_directories(tempDir, ec);
+    if(ec) {
+        error = "Cannot create runtime directory: " + tempDir.u8string();
+        return false;
+    }
+
+    for(int i = 0; i < 4; ++i) {
+        std::filesystem::remove(tempDir / ("led" + std::to_string(i) + ".state"), ec);
+        ec.clear();
+    }
+    std::filesystem::remove(tempDir / "renode-runtime.log", ec);
+    ec.clear();
+    std::filesystem::remove(tempDir / "renode-startup.log", ec);
+    ec.clear();
+
+    runtimeScript_ = tempDir / "runtime.resc";
+
+    std::ofstream f(runtimeScript_, std::ios::binary | std::ios::trunc);
+    if(!f) {
+        error = "Cannot create temporary Renode script: " + runtimeScript_.u8string();
+        return false;
+    }
+
+    // Patch 010b baseline:
+    // use only Renode's official STM32F103 platform and the user's ELF.
+    // Custom LED/Button/OLED integration is intentionally bypassed while
+    // CPU/HAL/platform execution is validated through GDB.
+    f << "using sysbus\n";
+    f << "mach create \"vstm32\"\n";
+    f << "log \"VSTM32_STAGE_MACHINE_CREATED\"\n";
+
+    f << "machine LoadPlatformDescription @platforms/cpus/stm32f103.repl\n";
+    f << "log \"VSTM32_STAGE_PLATFORM_LOADED\"\n";
+
+    f << "sysbus LoadELF " << RenodePath(elf) << "\n";
+    f << "log \"VSTM32_STAGE_ELF_LOADED\"\n";
+
+    f << "machine StartGdbServer 3333\n";
+    f << "log \"VSTM32_STAGE_GDB_STARTED\"\n";
+
+    f << "start\n";
+    f << "log \"VSTM32_STAGE_EMULATION_STARTED\"\n";
+    f.flush();
+
+    if(!f) {
+        error = "Failed while writing baseline runtime script: " + runtimeScript_.u8string();
+        return false;
+    }
+
+    return true;
+}
+bool RenodeProcess::Start(const std::filesystem::path& elf,
+                          const std::filesystem::path& appDir,
+                          const std::filesystem::path& explicitRenode,
+                          int monitorPort,
+                          std::string& error)
+{
+    Stop();
+
+    if(!std::filesystem::exists(elf)) {
+        error = "ELF file does not exist: " + elf.u8string();
+        return false;
+    }
+
+    if(!WriteRuntimeScript(elf, appDir, error)) return false;
+
+    auto renode = FindRenode(appDir, explicitRenode);
+
+    char temp[MAX_PATH]{};
+    GetTempPathA(MAX_PATH, temp);
+    const auto tempDir = std::filesystem::path(temp) / "VirtualSTM32";
+    const auto startupLog = tempDir / "renode-startup.log";
+
+    HANDLE logHandle = CreateFileW(
+        startupLog.wstring().c_str(),
+        GENERIC_WRITE,
+        FILE_SHARE_READ | FILE_SHARE_WRITE,
+        nullptr,
+        CREATE_ALWAYS,
+        FILE_ATTRIBUTE_NORMAL,
+        nullptr
+    );
+
+    if(logHandle == INVALID_HANDLE_VALUE) {
+        error = "Cannot create Renode startup log: " + startupLog.u8string();
+        return false;
+    }
+
+    // Execute runtime.resc explicitly through Renode's documented -e startup
+    // command path. The working directory is the runtime temp directory, so
+    // the Monitor command can use a simple @runtime.resc path with no Windows
+    // command-line quoting ambiguity.
+    std::wostringstream cmd;
+    cmd << Quote(renode)
+        << L" -P " << monitorPort
+        << L" -p --disable-gui --hide-analyzers"
+        << L" -e \"include @runtime.resc\"";
+
+    STARTUPINFOW si{};
+    si.cb = sizeof(si);
+    si.dwFlags |= STARTF_USESTDHANDLES;
+    si.hStdOutput = logHandle;
+    si.hStdError = logHandle;
+    si.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+
+    std::wstring command = cmd.str();
+    std::vector<wchar_t> mutableCmd(command.begin(), command.end());
+    mutableCmd.push_back(L'\0');
+
+    // Renode resolves @runtime.resc from its current working directory.
+    const std::wstring workingDir = tempDir.wstring();
+
+    BOOL ok = CreateProcessW(
+        nullptr,
+        mutableCmd.data(),
+        nullptr,
+        nullptr,
+        TRUE,
+        CREATE_NO_WINDOW,
+        nullptr,
+        workingDir.c_str(),
+        &si,
+        &pi_
+    );
+
+    CloseHandle(logHandle);
+
+    if(!ok) {
+        error = "Failed to launch Renode. Windows error=" + std::to_string(GetLastError()) +
+                "\nStartup log: " + startupLog.u8string();
+        ZeroMemory(&pi_, sizeof(pi_));
+        return false;
+    }
+
+    // Give the script a brief chance to fail deterministically. This is startup
+    // validation only; no network I/O is done and the SDL render loop is unaffected.
+    if(WaitForSingleObject(pi_.hProcess, 350) != WAIT_TIMEOUT) {
+        DWORD exitCode = 0;
+        GetExitCodeProcess(pi_.hProcess, &exitCode);
+
+        error =
+            "Renode exited during startup (exit code " + std::to_string(exitCode) + ").\n"
+            "Read the backend diagnostics:\n" +
+            (tempDir / "renode-startup.log").u8string() + "\n" +
+            (tempDir / "renode-runtime.log").u8string() + "\n" +
+            runtimeScript_.u8string();
+
+        CloseHandle(pi_.hThread);
+        CloseHandle(pi_.hProcess);
+        ZeroMemory(&pi_, sizeof(pi_));
+        return false;
+    }
+
+    return true;
+}
+
+void RenodeProcess::Stop()
+{
+    if(pi_.hProcess) {
+        if(WaitForSingleObject(pi_.hProcess, 0) == WAIT_TIMEOUT) {
+            TerminateProcess(pi_.hProcess, 0);
+            WaitForSingleObject(pi_.hProcess, 1000);
+        }
+
+        CloseHandle(pi_.hThread);
+        CloseHandle(pi_.hProcess);
+        ZeroMemory(&pi_, sizeof(pi_));
+    }
+}
+
+bool RenodeProcess::Running() const
+{
+    return pi_.hProcess &&
+           WaitForSingleObject(pi_.hProcess, 0) == WAIT_TIMEOUT;
+}
+
+
+

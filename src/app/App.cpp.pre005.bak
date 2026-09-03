@@ -1,0 +1,111 @@
+#include "app/App.h"
+#include "board/BoardConfig.h"
+#include <windows.h>
+#include <utility>
+
+App::App(std::filesystem::path elf, std::filesystem::path explicitRenode)
+    : elf_(std::move(elf)), explicitRenode_(std::move(explicitRenode)) {}
+
+App::~App() { Shutdown(); }
+
+std::filesystem::path App::ExecutableDir() const
+{
+    wchar_t p[MAX_PATH]{};
+    GetModuleFileNameW(nullptr, p, MAX_PATH);
+    return std::filesystem::path(p).parent_path();
+}
+
+void App::SetWindowTitle(const std::string& suffix)
+{
+    if(!window_) return;
+    std::string title = "Virtual STM32F103C8T6 Teaching Board - " + elf_.filename().u8string();
+    if(!suffix.empty()) title += " - " + suffix;
+    SDL_SetWindowTitle(window_, title.c_str());
+}
+
+bool App::Initialize()
+{
+    appDir_ = ExecutableDir();
+    if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) return false;
+    window_ = SDL_CreateWindow("Virtual STM32F103C8T6",
+                               SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+                               BoardConfig::WindowWidth, BoardConfig::WindowHeight,
+                               SDL_WINDOW_SHOWN);
+    if(!window_) return false;
+
+    renderer_ = SDL_CreateRenderer(window_, -1,
+                                   SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+    if(!renderer_) renderer_ = SDL_CreateRenderer(window_, -1, SDL_RENDERER_SOFTWARE);
+    if(!renderer_) return false;
+    if(!board_.Initialize(renderer_, appDir_ / "assets")) return false;
+
+    std::string error;
+    if(!renode_.Start(elf_, appDir_, explicitRenode_, BoardConfig::MonitorPort, error)) {
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR,
+                                 "VirtualSTM32 - Renode launch failed",
+                                 error.c_str(), window_);
+        SetWindowTitle("Renode unavailable");
+        return true;
+    }
+
+    connected_ = monitor_.Connect("127.0.0.1", BoardConfig::MonitorPort);
+    if(connected_) {
+        monitor_.Execute("machine StartGdbServer " + std::to_string(BoardConfig::GdbPort));
+        board_.OnBackendConnected(monitor_);
+        SetWindowTitle("RUN | GDB :3333");
+    } else {
+        SetWindowTitle("monitor connection failed");
+    }
+    return true;
+}
+
+void App::Shutdown()
+{
+    monitor_.Disconnect();
+    renode_.Stop();
+    board_.Shutdown();
+    if(renderer_) { SDL_DestroyRenderer(renderer_); renderer_ = nullptr; }
+    if(window_) { SDL_DestroyWindow(window_); window_ = nullptr; }
+    SDL_Quit();
+}
+
+void App::ResetBoard()
+{
+    if(!connected_) return;
+    monitor_.Execute("machine Reset");
+    board_.OnReset(monitor_);
+    paused_ = false;
+    SetWindowTitle("RESET | GDB :3333");
+}
+
+void App::HandleEvent(const SDL_Event& event)
+{
+    if(event.type == SDL_QUIT) {
+        running_ = false;
+        return;
+    }
+    if(event.type == SDL_KEYDOWN) {
+        if(event.key.keysym.sym == SDLK_ESCAPE) running_ = false;
+        if(event.key.keysym.sym == SDLK_r) ResetBoard();
+        if(event.key.keysym.sym == SDLK_SPACE && connected_) {
+            paused_ = !paused_;
+            monitor_.Execute(paused_ ? "pause" : "start");
+            SetWindowTitle(paused_ ? "PAUSED | GDB :3333" : "RUN | GDB :3333");
+        }
+    }
+
+    board_.HandleEvent(event, connected_ ? &monitor_ : nullptr);
+}
+
+int App::Run()
+{
+    if(!Initialize()) return 2;
+    while(running_) {
+        SDL_Event event{};
+        while(SDL_PollEvent(&event)) HandleEvent(event);
+        board_.Poll(connected_ ? &monitor_ : nullptr, SDL_GetTicks());
+        board_.Render(connected_, paused_);
+        SDL_Delay(2);
+    }
+    return 0;
+}

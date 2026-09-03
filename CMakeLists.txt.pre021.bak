@@ -1,4 +1,4 @@
-﻿cmake_minimum_required(VERSION 3.22)
+cmake_minimum_required(VERSION 3.22)
 project(VirtualSTM32F103C8T6 VERSION 0.1.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -21,7 +21,6 @@ add_executable(VirtualSTM32 WIN32
     src/app/App.cpp
     src/backend/MonitorClient.cpp
     src/backend/RenodeProcess.cpp
-    src/backend/external_control/RenodeExternalControl.cpp
     src/board/TeachingBoard.cpp
     src/peripherals/LedPeripheral.cpp
     src/peripherals/ButtonPeripheral.cpp
@@ -45,4 +44,3 @@ add_custom_command(TARGET VirtualSTM32 POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/renode" "$<TARGET_FILE_DIR:VirtualSTM32>/renode"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:SDL2::SDL2>" "$<TARGET_FILE_DIR:VirtualSTM32>"
 )
-

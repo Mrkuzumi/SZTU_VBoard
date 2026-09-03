@@ -1,0 +1,67 @@
+﻿//
+// VirtualSTM32 GPIO LED host bridge.
+//
+// This is deliberately tiny and event-driven:
+// STM32 GPIO -> Renode IGPIOReceiver::OnGPIO -> one-byte state file.
+// The SDL application reads the files locally and never blocks on Monitor I/O.
+//
+
+using System;
+using System.IO;
+using Antmicro.Renode.Peripherals;
+
+namespace Antmicro.Renode.Peripherals.Miscellaneous
+{
+    public class VirtualSTM32LedBridge : IPeripheral, IGPIOReceiver
+    {
+        public VirtualSTM32LedBridge(string id)
+        {
+            this.id = id;
+            outputDirectory = Path.Combine(Path.GetTempPath(), "VirtualSTM32");
+            outputPath = Path.Combine(outputDirectory, id + ".state");
+
+            Directory.CreateDirectory(outputDirectory);
+            WriteState(false);
+        }
+
+        public bool State { get; private set; }
+
+        public void OnGPIO(int number, bool value)
+        {
+            if(initialized && State == value)
+            {
+                return;
+            }
+
+            WriteState(value);
+        }
+
+        public void Reset()
+        {
+            WriteState(false);
+        }
+
+        private void WriteState(bool value)
+        {
+            State = value;
+            initialized = true;
+
+            try
+            {
+                Directory.CreateDirectory(outputDirectory);
+
+                // Write a single ASCII byte. The host only needs the latest state.
+                File.WriteAllText(outputPath, value ? "1" : "0");
+            }
+            catch
+            {
+                // Host-side display must never be able to stop MCU emulation.
+            }
+        }
+
+        private readonly string id;
+        private readonly string outputDirectory;
+        private readonly string outputPath;
+        private bool initialized;
+    }
+}

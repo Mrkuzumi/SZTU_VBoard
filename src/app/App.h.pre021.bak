@@ -1,0 +1,34 @@
+#pragma once
+#include "backend/MonitorClient.h"
+#include "backend/RenodeProcess.h"
+#include "board/TeachingBoard.h"
+#include <SDL.h>
+#include <filesystem>
+#include <string>
+
+class App {
+public:
+    App(std::filesystem::path elf, std::filesystem::path explicitRenode);
+    ~App();
+    int Run();
+
+private:
+    bool Initialize();
+    void Shutdown();
+    void HandleEvent(const SDL_Event& event);
+    void ResetBoard();
+    std::filesystem::path ExecutableDir() const;
+    void SetWindowTitle(const std::string& suffix);
+
+    std::filesystem::path elf_;
+    std::filesystem::path explicitRenode_;
+    std::filesystem::path appDir_;
+    SDL_Window* window_ = nullptr;
+    SDL_Renderer* renderer_ = nullptr;
+    TeachingBoard board_;
+    MonitorClient monitor_;
+    RenodeProcess renode_;
+    bool running_ = true;
+    bool paused_ = false;
+    bool connected_ = false;
+};

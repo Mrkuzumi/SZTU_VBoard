@@ -1,0 +1,45 @@
+﻿#pragma once
+
+#include <windows.h>
+#include <cstdint>
+#include <filesystem>
+#include <string>
+
+struct RenodeRuntimeOptions {
+    int monitorPort = 33335;
+    int gdbPort = 3333;
+    int externalControlPort = 33334;
+    std::uint32_t sysTickFrequencyHz = 8000000;
+};
+
+class RenodeProcess {
+public:
+    RenodeProcess() = default;
+    ~RenodeProcess();
+
+    bool Start(const std::filesystem::path& elf,
+               const std::filesystem::path& appDir,
+               const std::filesystem::path& explicitRenode,
+               const RenodeRuntimeOptions& options,
+               std::string& error);
+
+    void Stop();
+    bool Running() const;
+
+    std::filesystem::path RuntimeScript() const { return runtimeScript_; }
+
+private:
+    static std::filesystem::path FindRenode(
+        const std::filesystem::path& appDir,
+        const std::filesystem::path& explicitRenode
+    );
+
+    static std::wstring Quote(const std::filesystem::path& path);
+
+    bool WriteRuntimeScript(const std::filesystem::path& elf,
+                            const RenodeRuntimeOptions& options,
+                            std::string& error);
+
+    PROCESS_INFORMATION pi_{};
+    std::filesystem::path runtimeScript_;
+};

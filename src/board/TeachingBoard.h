@@ -1,0 +1,40 @@
+﻿#pragma once
+
+#include <SDL.h>
+#include <filesystem>
+#include <memory>
+#include <vector>
+
+#include "ui/TextureCache.h"
+#include "peripherals/IPeripheral.h"
+
+class MonitorClient;
+class IGpioBackend;
+
+class TeachingBoard {
+public:
+    TeachingBoard() = default;
+    ~TeachingBoard();
+
+    void SetGpioBackend(IGpioBackend* backend) { gpioBackend_ = backend; }
+
+    bool Initialize(SDL_Renderer* renderer,
+                    const std::filesystem::path& assetDir);
+    void Shutdown();
+
+    void OnBackendConnected(MonitorClient& monitor);
+    void OnReset(MonitorClient& monitor);
+    void HandleEvent(const SDL_Event& event, MonitorClient* monitor);
+    void Poll(MonitorClient* monitor, uint32_t nowMs);
+    void Render(bool backendConnected, bool paused);
+
+private:
+    void BuildDefaultPeripherals();
+
+    SDL_Renderer* renderer_ = nullptr;
+    SDL_Texture* background_ = nullptr;
+    TextureCache textures_;
+    std::filesystem::path assetDir_;
+    IGpioBackend* gpioBackend_ = nullptr;
+    std::vector<std::unique_ptr<IPeripheral>> peripherals_;
+};

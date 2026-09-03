@@ -1,0 +1,85 @@
+#include "board/TeachingBoard.h"
+#include "board/BoardConfig.h"
+#include "backend/MonitorClient.h"
+#include "peripherals/IPeripheral.h"
+#include "peripherals/LedPeripheral.h"
+#include "peripherals/ButtonPeripheral.h"
+#include "peripherals/Ssd1306Peripheral.h"
+
+TeachingBoard::~TeachingBoard() { Shutdown(); }
+
+void TeachingBoard::BuildDefaultPeripherals()
+{
+    peripherals_.clear();
+    for(const auto& led : BoardConfig::LEDs)
+        peripherals_.push_back(std::make_unique<LedPeripheral>(led));
+    for(const auto& button : BoardConfig::Buttons)
+        peripherals_.push_back(std::make_unique<ButtonPeripheral>(button));
+    peripherals_.push_back(std::make_unique<Ssd1306Peripheral>());
+}
+
+bool TeachingBoard::Initialize(SDL_Renderer* renderer,
+                               const std::filesystem::path& assetDir)
+{
+    renderer_ = renderer;
+    assetDir_ = assetDir;
+    textures_.SetRenderer(renderer);
+    background_ = textures_.LoadBmp(assetDir_ / "board.bmp");
+    if(!background_) return false;
+
+    BuildDefaultPeripherals();
+    for(auto& peripheral : peripherals_) {
+        if(!peripheral->Initialize(renderer_, textures_, assetDir_)) return false;
+    }
+    return true;
+}
+
+void TeachingBoard::Shutdown()
+{
+    peripherals_.clear();
+    background_ = nullptr;
+    textures_.Clear();
+    renderer_ = nullptr;
+}
+
+void TeachingBoard::OnBackendConnected(MonitorClient& monitor)
+{
+    for(auto& peripheral : peripherals_) peripheral->OnBackendConnected(monitor);
+}
+
+void TeachingBoard::OnReset(MonitorClient& monitor)
+{
+    for(auto& peripheral : peripherals_) peripheral->OnReset(monitor);
+}
+
+void TeachingBoard::HandleEvent(const SDL_Event& event, MonitorClient* monitor)
+{
+    for(auto& peripheral : peripherals_) peripheral->HandleEvent(event, monitor);
+}
+
+void TeachingBoard::Poll(MonitorClient* monitor, uint32_t nowMs)
+{
+    for(auto& peripheral : peripherals_) peripheral->Poll(monitor, nowMs);
+}
+
+void TeachingBoard::Render(bool backendConnected, bool paused)
+{
+    SDL_SetRenderDrawColor(renderer_, 16, 19, 24, 255);
+    SDL_RenderClear(renderer_);
+    SDL_Rect full{0, 0, BoardConfig::WindowWidth, BoardConfig::WindowHeight};
+    SDL_RenderCopy(renderer_, background_, nullptr, &full);
+
+    for(auto& peripheral : peripherals_) peripheral->Render(renderer_);
+
+    SDL_Rect status{1079, 35, 18, 18};
+    if(backendConnected) SDL_SetRenderDrawColor(renderer_, 77, 223, 122, 255);
+    else SDL_SetRenderDrawColor(renderer_, 232, 88, 88, 255);
+    SDL_RenderFillRect(renderer_, &status);
+
+    SDL_Rect run{1130, 35, 18, 18};
+    if(paused) SDL_SetRenderDrawColor(renderer_, 245, 183, 66, 255);
+    else SDL_SetRenderDrawColor(renderer_, 77, 223, 122, 255);
+    SDL_RenderFillRect(renderer_, &run);
+
+    SDL_RenderPresent(renderer_);
+}

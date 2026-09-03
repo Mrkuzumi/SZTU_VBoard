@@ -1,10 +1,10 @@
-# VirtualSTM32F103C8T6 (Windows MVP)
+# VirtualSTM32F103C8T6 V0.1.1 (Windows MVP)
 
-![V0.1 teaching board preview](docs/board_preview.png)
+![V0.1.1 teaching board preview](docs/board_preview.png)
 
 一个受 NVBoard 思路启发的 **STM32F103C8T6 虚拟教学开发板**。目标不是让用户改写程序去“适配模拟器”，而是让 CubeIDE / Keil5 正常编译 STM32 HAL 工程，生成 ELF/AXF 后自动弹出一块虚拟板，并运行同一份固件。
 
-## V0.1 已实现的板级功能
+## V0.1.1 已实现的板级功能
 
 - MCU：STM32F103 系列 Cortex-M3，后端使用 Renode `stm32f103.repl`
 - GPIO 输出：4 个固定 LED
@@ -25,29 +25,63 @@
 - 运行控制：Space 暂停/继续，R 复位，Esc 退出
 - 预留调试：Renode GDB Server 默认尝试开放 `localhost:3333`
 
-> V0.1 的重点是把“HAL 固件 -> Renode -> GPIO/I2C -> 虚拟贴图板”完整跑通。它不是 STM32F103 的 100% 周期精确硬件替代品。
+> V0.1.1 的重点是把“HAL 固件 -> Renode -> GPIO/I2C -> 虚拟贴图板”完整跑通。它不是 STM32F103 的 100% 周期精确硬件替代品。
 
 ## 目录
 
 ```text
 VirtualSTM32F103C8T6/
-├─ src/                  Windows/SDL2 前端与 Renode Monitor 客户端
+├─ src/
+│  ├─ app/               应用生命周期（不放具体外设逻辑）
+│  ├─ backend/           Renode 进程与 Monitor 通信
+│  ├─ board/             教学板组合与引脚配置
+│  ├─ peripherals/       IPeripheral + LED/按键/SSD1306 模块
+│  └─ ui/                SDL2 贴图缓存
 ├─ assets/               板卡、LED、按键、OLED 模块 BMP 贴图
 ├─ renode/               SSD1306 I2C -> framebuffer bridge
-├─ tools/                构建、Renode 下载、CubeIDE/Keil 接入脚本
+├─ tools/                构建、环境诊断、IDE 接入脚本
+│  └─ patches/           可重复执行的版本修复/迁移脚本
 ├─ docs/                 架构、IDE 配置、限制说明
 └─ examples/             HAL 配置/测试代码片段
 ```
+
+## V0.1.1 重要修复：NMake / `-A x64`
+
+V0.1.0 的 `build_windows.ps1` 没有显式指定 Visual Studio Generator。如果用户环境变量或 CMake 默认 Generator 是 `NMake Makefiles`，同时脚本传入 `-A x64`，CMake 会报：
+
+```text
+NMake Makefiles does not support platform specification x64
+```
+
+V0.1.1 已改为自动检测并显式选择 `Visual Studio 18 2026` 或 `Visual Studio 17 2022`，同时会清理使用了错误 Generator 的旧 `build/` 缓存。
+
+老 V0.1.0 工程也可运行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\patches\001_fix_cmake_generator.ps1
+```
+
+然后重新运行 `tools\build_windows.ps1`。
+
+## 模块化约束
+
+所有新外设优先实现 `src/peripherals/IPeripheral.h`。`App` 只负责窗口、Renode 生命周期以及事件分发，不再直接保存 LED/按键/OLED 状态。新增蜂鸣器、UART、SPI 屏等时，原则上新增外设类并在 `TeachingBoard` 注册，不把逻辑继续堆回 `App.cpp`。详见 `docs/ARCHITECTURE.md` 与 `docs/DEVELOPMENT.md`。
 
 ## 1. 准备环境
 
 需要：
 
 1. Windows 10/11 x64
-2. Visual Studio 2022 C++ Desktop workload / Build Tools（或更新的 MSVC x64 工具链）
-3. CMake 3.22+
+2. Visual Studio / Build Tools 的 **Desktop development with C++**（脚本优先支持 VS 2026，其次 VS 2022）
+3. CMake；若只安装 Visual Studio 2026，需要 CMake 4.2+ 才识别 `Visual Studio 18 2026` 生成器
 4. 网络（第一次 CMake 配置会下载 SDL2 2.32.10）
 5. Renode 1.16.1 Windows portable（`setup_renode.ps1` 自动下载并校验 SHA256）
+
+先检查环境：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\doctor.ps1
+```
 
 首次安装推荐一条命令完成 Renode + 编译：
 

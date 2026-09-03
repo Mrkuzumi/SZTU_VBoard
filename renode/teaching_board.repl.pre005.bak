@@ -1,0 +1,36 @@
+# VirtualSTM32F103C8T6 teaching board overlay.
+# Reuse Renode's STM32F103 SoC model, then add the fixed teaching peripherals.
+using "platforms/cpus/stm32f103.repl"
+
+# Four GPIO output LEDs.
+led0: Miscellaneous.LED @ gpioPortC 13
+led1: Miscellaneous.LED @ gpioPortA 0
+led2: Miscellaneous.LED @ gpioPortA 1
+led3: Miscellaneous.LED @ gpioPortA 2
+
+gpioPortC:
+    13 -> led0@0
+
+gpioPortA:
+    0 -> led1@0
+    1 -> led2@0
+    2 -> led3@0
+
+# Four active-low buttons. Renode Button normally drives 1 when pressed;
+# invert:true makes Press drive 0 and Release drive 1, matching pull-up keys.
+key0: Miscellaneous.Button @ gpioPortB 12
+    invert: true
+    -> gpioPortB@12
+key1: Miscellaneous.Button @ gpioPortB 13
+    invert: true
+    -> gpioPortB@13
+key2: Miscellaneous.Button @ gpioPortB 14
+    invert: true
+    -> gpioPortB@14
+key3: Miscellaneous.Button @ gpioPortB 15
+    invert: true
+    -> gpioPortB@15
+
+# Fixed SSD1306 bus endpoint: I2C1, 7-bit address 0x3C.
+# The Python bridge interprets writes into a 128x64 framebuffer.
+oled: Mocks.DummyI2CSlave @ i2c1 0x3C
