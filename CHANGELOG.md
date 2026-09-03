@@ -33,3 +33,10 @@
 - Preserved the proven relative @firmware.elf Windows loading fix.
 - Added External Control server on TCP 33334 and retained GDB on 3333.
 - Overrode STM32F103 SysTick to the current HSI 8 MHz board preset so HAL_Delay timing is realistic.
+
+## Patch 022 - External Control button input
+- Added asynchronous GPIO SET_STATE support to the Windows-native External Control backend.
+- KEY0..KEY3 now inject PB12..PB15 electrical levels into Renode.
+- Buttons are active-low: released=HIGH, pressed=LOW.
+- SDL input events only update atomics; socket I/O remains on the backend worker thread.
+- LED output observation from Patch 021 remains unchanged.

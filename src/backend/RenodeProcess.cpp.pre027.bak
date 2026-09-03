@@ -109,6 +109,11 @@ bool RenodeProcess::WriteRuntimeScript(
                 overlay.u8string();
         return false;
     }
+
+    repl << "nvic:\n";
+    repl << "    systickFrequency: "
+         << options.sysTickFrequencyHz << "\n\n";
+
     repl << "gpioPortC:\n";
     repl << "    13 -> gpioPortB@0\n\n";
 
@@ -299,4 +304,3 @@ bool RenodeProcess::Running() const
            WaitForSingleObject(pi_.hProcess, 0) ==
                WAIT_TIMEOUT;
 }
-

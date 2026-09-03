@@ -1,57 +1,111 @@
-#include "peripherals/ButtonPeripheral.h"
-#include "backend/MonitorClient.h"
-#include "ui/TextureCache.h"
-#include <string>
+﻿#include "peripherals/ButtonPeripheral.h"
 
-bool ButtonPeripheral::Initialize(SDL_Renderer*, TextureCache& textures,
-                                  const std::filesystem::path& assetDir)
+#include "backend/gpio/IGpioBackend.h"
+#include "ui/TextureCache.h"
+
+bool ButtonPeripheral::Initialize(
+    SDL_Renderer*,
+    TextureCache& textures,
+    const std::filesystem::path& assetDir)
 {
-    upTexture_ = textures.LoadBmp(assetDir / "button_up.bmp");
-    downTexture_ = textures.LoadBmp(assetDir / "button_down.bmp");
+    upTexture_ =
+        textures.LoadBmp(
+            assetDir / "button_up.bmp"
+        );
+
+    downTexture_ =
+        textures.LoadBmp(
+            assetDir / "button_down.bmp"
+        );
+
+    pressed_ = false;
+
+    // Active-low physical push buttons:
+    // released => HIGH.
+    if(gpioBackend_) {
+        const bool releasedLevel =
+            binding_.activeLow ? true : false;
+
+        gpioBackend_->QueueWrite(
+            binding_.controller,
+            binding_.pin,
+            releasedLevel
+        );
+    }
+
     return upTexture_ && downTexture_;
 }
 
 bool ButtonPeripheral::Hit(int x, int y) const
 {
-    return x >= binding_.x && x < binding_.x + binding_.w &&
-           y >= binding_.y && y < binding_.y + binding_.h;
+    return
+        x >= binding_.x &&
+        x < binding_.x + binding_.w &&
+        y >= binding_.y &&
+        y < binding_.y + binding_.h;
 }
 
-void ButtonPeripheral::SetPressed(bool pressed, MonitorClient* monitor)
+void ButtonPeripheral::SetPressed(bool pressed)
 {
-    if(pressed_ == pressed && monitor == nullptr) return;
+    if(pressed_ == pressed) return;
+
     pressed_ = pressed;
-    if(!monitor || !monitor->IsConnected()) return;
 
-    // teaching_board.repl uses invert:true; Press therefore drives MCU pin LOW.
-    const std::string cmd = std::string(binding_.monitorObject) +
-                            (pressed ? " Press" : " Release");
-    monitor->Execute(cmd);
+    if(!gpioBackend_) return;
+
+    // activeLow:
+    // pressed  => LOW
+    // released => HIGH
+    const bool electricalLevel =
+        binding_.activeLow
+            ? !pressed
+            : pressed;
+
+    gpioBackend_->QueueWrite(
+        binding_.controller,
+        binding_.pin,
+        electricalLevel
+    );
 }
 
-void ButtonPeripheral::OnBackendConnected(MonitorClient& monitor)
-{
-    SetPressed(false, &monitor);
-}
-
-void ButtonPeripheral::OnReset(MonitorClient& monitor)
-{
-    SetPressed(false, &monitor);
-}
-
-void ButtonPeripheral::HandleEvent(const SDL_Event& event, MonitorClient* monitor)
+void ButtonPeripheral::HandleEvent(
+    const SDL_Event& event,
+    MonitorClient*)
 {
     if(event.type == SDL_MOUSEBUTTONDOWN &&
-       Hit(event.button.x, event.button.y)) {
-        SetPressed(true, monitor);
+       event.button.button == SDL_BUTTON_LEFT &&
+       Hit(
+           event.button.x,
+           event.button.y
+       )) {
+        SetPressed(true);
+        return;
     }
-    if(event.type == SDL_MOUSEBUTTONUP && pressed_) {
-        SetPressed(false, monitor);
+
+    // Release the button even if the mouse was moved outside the hitbox.
+    if(event.type == SDL_MOUSEBUTTONUP &&
+       event.button.button == SDL_BUTTON_LEFT &&
+       pressed_) {
+        SetPressed(false);
     }
 }
 
-void ButtonPeripheral::Render(SDL_Renderer* renderer)
+void ButtonPeripheral::Render(
+    SDL_Renderer* renderer)
 {
-    SDL_Rect rect{binding_.x, binding_.y, binding_.w, binding_.h};
-    SDL_RenderCopy(renderer, pressed_ ? downTexture_ : upTexture_, nullptr, &rect);
+    SDL_Rect rect{
+        binding_.x,
+        binding_.y,
+        binding_.w,
+        binding_.h
+    };
+
+    SDL_RenderCopy(
+        renderer,
+        pressed_
+            ? downTexture_
+            : upTexture_,
+        nullptr,
+        &rect
+    );
 }
