@@ -4,17 +4,16 @@ SZTU_VBoard 是一个基于 **Renode + SDL2** 的 Windows 虚拟 STM32F103C8T6 �
 
 它可以直接运行 STM32 工程生成的 `.elf` / `.axf` 固件，并在虚拟开发板界面中显示 GPIO、按键和 SSD1306 OLED 的实际运行结果。
 
-> 适合 STM32 HAL 学习、基础外设实验和无实物开发板时的程序验证。
+> 适合 STM32 HAL 学习、基础外设实验，以及没有实体开发板时的程序验证。
+
+![GUI](./tools/GUI.png)
 
 ---
 
-## 功能
-
-目前支持：
+## 当前支持
 
 - STM32F103C8T6
-- GPIO 输出
-- GPIO 输入
+- GPIO 输入 / 输出
 - 4 个虚拟 LED
 - 4 个虚拟按键
 - I2C1
@@ -45,71 +44,53 @@ SZTU_VBoard 是一个基于 **Renode + SDL2** 的 Windows 虚拟 STM32F103C8T6 �
 
 # 快速开始
 
-## 1. 克隆仓库
+## 普通用户：直接下载 Release
 
-```powershell
-git clone https://github.com/Mrkuzumi/SZTU_VBoard.git
-cd SZTU_VBoard
-```
+前往：
 
-## 2. 初始化运行环境
+[GitHub Releases](https://github.com/Mrkuzumi/SZTU_VBoard/releases/latest)
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\setup.ps1
-```
-
-首次运行会自动准备所需的 Renode 运行环境。
-
-大型运行文件不会保存在 Git 仓库中，而是缓存在用户本地目录。
-
-## 3. 编译 STM32 工程
-
-使用 STM32CubeIDE 或 Keil 正常编译你的 STM32F103C8T6 工程。
-
-支持：
+下载：
 
 ```text
-.elf
-.axf
+SZTU_VBoard-windows-x64.zip
 ```
 
-例如 CubeIDE 常见输出：
-
-```text
-Debug\
-└─ project.elf
-```
-
-或：
-
-```text
-Release\
-└─ project.elf
-```
-
-## 4. 启动虚拟开发板
+解压后，第一次使用执行：
 
 ```powershell
-.\tools\run.ps1 "<firmware.elf>"
+powershell -ExecutionPolicy Bypass -File .\tools\setup_runtime.ps1
 ```
 
-例如：
+该脚本会自动准备 Renode 运行环境，之后无需重复下载。
+
+然后运行 STM32 固件：
 
 ```powershell
-.\tools\run.ps1 "...\MySTM32Project\Debug\MySTM32Project.elf"
+powershell -ExecutionPolicy Bypass -File .\tools\run.ps1 "<firmware.elf>"
 ```
 
-虚拟开发板会自动启动并运行该固件。
+Keil 生成的 `.axf` 也可以直接运行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\run.ps1 "<firmware.axf>"
+```
+
+例如 CubeIDE 当前使用 Debug 配置时：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\run.ps1 "..\MySTM32Project\Debug\MySTM32Project.elf"
+```
+
+> SZTU_VBoard 不要求固定使用 Debug 或 Release，只需要传入你当前实际生成的固件文件。
 
 ---
 
 # STM32CubeIDE 配置
 
-SZTU_VBoard 不要求固定使用 Debug 或 Release。
+使用 STM32CubeIDE 正常创建并编译 STM32F103C8T6 工程即可。
 
-只需要运行当前实际生成的 ELF 文件即可。
-
-### GPIO 输出
+## GPIO 输出
 
 例如使用 PC13 控制 LED0：
 
@@ -119,7 +100,7 @@ HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
 HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
 ```
 
-### 按键输入
+## 按键输入
 
 KEY0 对应 PB12，低电平按下。
 
@@ -140,7 +121,7 @@ if (HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_12) == GPIO_PIN_RESET)
 }
 ```
 
-### SSD1306 OLED
+## SSD1306 OLED
 
 CubeMX 配置：
 
@@ -148,16 +129,11 @@ CubeMX 配置：
 I2C1
 PB6 = I2C1_SCL
 PB7 = I2C1_SDA
-```
-
-推荐：
-
-```text
 100 kHz
 7-bit address
 ```
 
-HAL 中使用：
+HAL 地址：
 
 ```c
 #define SSD1306_ADDR (0x3C << 1)
@@ -170,17 +146,7 @@ HAL_I2C_IsDeviceReady()
 HAL_I2C_Master_Transmit()
 ```
 
-常见的 SSD1306 HAL 轮询式驱动可以直接使用。
-
----
-
-# Keil
-
-Keil 生成的 `.axf` 文件也可以直接运行：
-
-```powershell
-.\tools\run.ps1 "<firmware.axf>"
-```
+常见的 SSD1306 HAL 轮询式驱动可以使用。
 
 ---
 
@@ -203,7 +169,33 @@ Esc  退出
 
 关闭虚拟板后，SZTU_VBoard 会自动结束对应的 Renode 后台进程。
 
-如果再次启动新的虚拟板，旧实例会自动退出。
+再次启动新的虚拟板时，旧实例会自动退出。
+
+---
+
+# 从源码开发
+
+如果你需要修改 SZTU_VBoard 本身：
+
+```powershell
+git clone https://github.com/Mrkuzumi/SZTU_VBoard.git
+cd SZTU_VBoard
+```
+
+开发环境：
+
+- Windows 10 / 11 x64
+- CMake
+- Visual Studio 2022 或 Build Tools 2022
+- Desktop development with C++
+
+SDL2 由 CMake 自动处理，不需要单独安装。
+
+编译：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\build.ps1
+```
 
 ---
 
@@ -221,44 +213,9 @@ SZTU_VBoard/
 │  ├─ platform/
 │  └─ ui/
 ├─ tools/
-│  ├─ setup.ps1
-│  ├─ setup_runtime.ps1
-│  ├─ run.ps1
-│  └─ build.ps1
 ├─ CMakeLists.txt
 └─ README.md
 ```
-
----
-
-# 开发 SZTU_VBoard
-
-这一部分只针对需要修改 SZTU_VBoard 本身源码的开发者。
-
-普通使用者不需要安装 Visual Studio 或 CMake。
-
-### 开发环境
-
-- Windows 10 / 11
-- CMake
-- Visual Studio 2022 或 Build Tools 2022
-- Desktop development with C++
-
-SDL2 由 CMake 自动处理，不需要手动安装。
-
-### 编译
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\build.ps1
-```
-
-构建完成后仍然使用：
-
-```powershell
-.\tools\run.ps1 "<firmware.elf>"
-```
-
-启动固件。
 
 ---
 
@@ -274,13 +231,12 @@ powershell -ExecutionPolicy Bypass -File .\tools\build.ps1
 - HAL 轮询式 I2C
 
 UART、SPI、ADC、PWM 等外设仍在后续开发中。
-在使用过程中有bug的请发送邮件至mr.kuzumi0601@outlook.com
+
+如果遇到问题，建议通过 GitHub Issues 提交复现步骤和相关日志。或联系mr.kuzumi0601@outlook.com
 
 ---
 
-## License
-
-本项目使用的第三方组件包括：
+## 第三方组件
 
 - [Renode](https://github.com/renode/renode)
 - [SDL2](https://www.libsdl.org/)
