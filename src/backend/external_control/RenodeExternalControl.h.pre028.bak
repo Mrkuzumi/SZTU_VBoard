@@ -42,7 +42,6 @@ private:
 
     // PB0..PB3 are internal observation sinks for LED outputs.
     std::array<std::atomic<bool>, 4> gpioBMirrorStates_{};
-    std::array<std::atomic<bool>, 4> gpioBMirrorValid_{};
 
     // PB12..PB15 are GUI button inputs.
     // Index 0 => PB12, 1 => PB13, 2 => PB14, 3 => PB15.
@@ -51,4 +50,3 @@ private:
 
     std::thread worker_;
 };
-

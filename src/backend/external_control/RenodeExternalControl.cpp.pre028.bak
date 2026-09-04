@@ -15,11 +15,6 @@ namespace {
 
 constexpr std::uint8_t kCmdGetMachine = 3;
 constexpr std::uint8_t kCmdGpio = 5;
-constexpr std::uint8_t kCmdSystemBus = 6;
-constexpr std::uint8_t kSysbusRead = 0;
-constexpr std::uint8_t kAccessDoubleWord = 4;
-constexpr std::uint64_t kGpioA_Crl = 0x40010800ull;
-constexpr std::uint64_t kGpioC_Crh = 0x40011004ull;
 
 constexpr std::uint8_t kRcCommandFailed = 0;
 constexpr std::uint8_t kRcFatalError = 1;
@@ -43,13 +38,6 @@ void AppendU16(Bytes& out, std::uint16_t value)
 void AppendU32(Bytes& out, std::uint32_t value)
 {
     for(int shift = 0; shift < 32; shift += 8) {
-        out.push_back(static_cast<std::uint8_t>((value >> shift) & 0xFFu));
-    }
-}
-
-void AppendU64(Bytes& out, std::uint64_t value)
-{
-    for(int shift = 0; shift < 64; shift += 8) {
         out.push_back(static_cast<std::uint8_t>((value >> shift) & 0xFFu));
     }
 }
@@ -405,68 +393,6 @@ bool GetGpioDescriptor(
     return descriptor >= 0;
 }
 
-bool GetSysbusDescriptor(SOCKET socketHandle,
-                         std::int32_t machineDescriptor,
-                         std::int32_t& descriptor)
-{
-    const std::string_view name = "sysbus";
-    Bytes payload;
-
-    AppendI32(payload, -1);
-    AppendI32(payload, machineDescriptor);
-    AppendI32(payload, static_cast<std::int32_t>(name.size()));
-    payload.insert(payload.end(), name.begin(), name.end());
-
-    Bytes response;
-
-    if(!InvokeCommand(socketHandle,
-                      kCmdSystemBus,
-                      payload,
-                      response) ||
-       response.size() != 4) {
-        return false;
-    }
-
-    descriptor = ReadI32(response.data());
-    return descriptor >= 0;
-}
-
-bool ReadSysbusDword(SOCKET socketHandle,
-                     std::int32_t sysbusDescriptor,
-                     std::uint64_t address,
-                     std::uint32_t& value)
-{
-    Bytes payload;
-
-    AppendI32(payload, sysbusDescriptor);
-    payload.push_back(kSysbusRead);
-    payload.push_back(kAccessDoubleWord);
-    AppendU64(payload, address);
-    AppendU32(payload, 1);
-
-    Bytes response;
-
-    if(!InvokeCommand(socketHandle,
-                      kCmdSystemBus,
-                      payload,
-                      response) ||
-       response.size() != 4) {
-        return false;
-    }
-
-    value = ReadU32(response.data());
-    return true;
-}
-
-bool IsOutputMode(std::uint32_t configRegister, unsigned nibbleIndex)
-{
-    // STM32F1 CRL/CRH pin field = CNF[1:0] + MODE[1:0].
-    // MODE == 00 means input; nonzero means output/AF output.
-    const auto nibble =
-        (configRegister >> (nibbleIndex * 4u)) & 0xFu;
-
-    return (nibble & 0x3u) != 0;
-}
 bool GetGpioState(
     SOCKET socketHandle,
     std::int32_t gpioDescriptor,
@@ -608,8 +534,9 @@ SOCKET ConnectSocket(
 
 RenodeExternalControl::RenodeExternalControl()
 {
-    for(auto& state : gpioBMirrorStates_) { state.store(false); }
-    for(auto& valid : gpioBMirrorValid_) { valid.store(false); }
+    for(auto& state : gpioBMirrorStates_) {
+        state.store(false);
+    }
 
     // All four buttons are active-low:
     // released = HIGH.
@@ -641,8 +568,9 @@ void RenodeExternalControl::Start(
     stopRequested_.store(false);
     connected_.store(false);
 
-    for(auto& state : gpioBMirrorStates_) { state.store(false); }
-    for(auto& valid : gpioBMirrorValid_) { valid.store(false); }
+    for(auto& state : gpioBMirrorStates_) {
+        state.store(false);
+    }
 
     // A board reset releases every physical push button.
     for(auto& state : buttonDesiredStates_) {
@@ -681,23 +609,29 @@ bool RenodeExternalControl::TryRead(
     bool& state) const noexcept
 {
     if(!controller ||
-       std::strcmp(controller, "gpioPortB") != 0) {
+       std::strcmp(
+           controller,
+           "gpioPortB"
+       ) != 0) {
         return false;
     }
 
     if(pin < 0 ||
-       pin >= static_cast<int>(gpioBMirrorStates_.size())) {
+       pin >= static_cast<int>(
+           gpioBMirrorStates_.size()
+       )) {
         return false;
     }
 
-    const auto index = static_cast<std::size_t>(pin);
-
-    if(!connected_.load() ||
-       !gpioBMirrorValid_[index].load()) {
+    if(!connected_.load()) {
         return false;
     }
 
-    state = gpioBMirrorStates_[index].load();
+    state =
+        gpioBMirrorStates_[
+            static_cast<std::size_t>(pin)
+        ].load();
+
     return true;
 }
 
@@ -749,14 +683,13 @@ void RenodeExternalControl::WorkerMain()
 
         if(socketHandle == INVALID_SOCKET) {
             std::this_thread::sleep_for(
-                std::chrono::milliseconds(30)
+                std::chrono::milliseconds(150)
             );
             continue;
         }
 
         std::int32_t machineDescriptor = -1;
         std::int32_t gpioBDescriptor = -1;
-        std::int32_t sysbusDescriptor = -1;
 
         const bool initialized =
             PerformHandshake(socketHandle) &&
@@ -770,14 +703,14 @@ void RenodeExternalControl::WorkerMain()
                 machineDescriptor,
                 "gpioPortB",
                 gpioBDescriptor
-            ) && GetSysbusDescriptor(socketHandle, machineDescriptor, sysbusDescriptor);
+            );
 
         if(!initialized) {
             closesocket(socketHandle);
             connected_.store(false);
 
             std::this_thread::sleep_for(
-                std::chrono::milliseconds(30)
+                std::chrono::milliseconds(150)
             );
             continue;
         }
@@ -815,7 +748,7 @@ void RenodeExternalControl::WorkerMain()
             connected_.store(false);
 
             std::this_thread::sleep_for(
-                std::chrono::milliseconds(50)
+                std::chrono::milliseconds(100)
             );
             continue;
         }
@@ -855,35 +788,6 @@ void RenodeExternalControl::WorkerMain()
             if(!connectionHealthy) break;
 
             // ---------------------------------------------------------
-            // Validate the REAL STM32 source pin configuration.
-            //
-            // An unused PC13 can leave its PB0 mirror LOW. Because LED0
-            // is active-low, treating that default LOW as a real output
-            // creates a "ghost LED". Only MODE[1:0] != 00 is output.
-            // ---------------------------------------------------------
-            std::uint32_t gpioA_Crl = 0;
-            std::uint32_t gpioC_Crh = 0;
-
-            if(!ReadSysbusDword(socketHandle,
-                                sysbusDescriptor,
-                                kGpioA_Crl,
-                                gpioA_Crl) ||
-               !ReadSysbusDword(socketHandle,
-                                sysbusDescriptor,
-                                kGpioC_Crh,
-                                gpioC_Crh)) {
-                connectionHealthy = false;
-                break;
-            }
-
-            // PB0 <- PC13. CRH nibble index = 13 - 8 = 5.
-            gpioBMirrorValid_[0].store(IsOutputMode(gpioC_Crh, 5));
-
-            // PB1/PB2/PB3 <- PA0/PA1/PA2.
-            gpioBMirrorValid_[1].store(IsOutputMode(gpioA_Crl, 0));
-            gpioBMirrorValid_[2].store(IsOutputMode(gpioA_Crl, 1));
-            gpioBMirrorValid_[3].store(IsOutputMode(gpioA_Crl, 2));
-            // ---------------------------------------------------------
             // MCU output -> GUI LED path
             // ---------------------------------------------------------
             for(int pin = 0; pin < 4; ++pin) {
@@ -922,11 +826,10 @@ void RenodeExternalControl::WorkerMain()
 
         if(!stopRequested_.load()) {
             std::this_thread::sleep_for(
-                std::chrono::milliseconds(50)
+                std::chrono::milliseconds(100)
             );
         }
     }
 
     WSACleanup();
 }
-

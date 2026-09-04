@@ -13,17 +13,12 @@ bool LedPeripheral::Initialize(SDL_Renderer*,
 
 void LedPeripheral::Poll(MonitorClient*, uint32_t)
 {
-    if(!gpioBackend_) {
-        on_ = false;
-        return;
-    }
+    if(!gpioBackend_) return;
 
     bool raw = false;
-
     if(!gpioBackend_->TryRead(binding_.observerController,
                               binding_.observerPin,
                               raw)) {
-        on_ = false;
         return;
     }
 
@@ -35,4 +30,3 @@ void LedPeripheral::Render(SDL_Renderer* renderer)
     SDL_Rect rect{binding_.x, binding_.y, 48, 48};
     SDL_RenderCopy(renderer, on_ ? onTexture_ : offTexture_, nullptr, &rect);
 }
-

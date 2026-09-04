@@ -26,7 +26,7 @@ public:
     void OnReset(MonitorClient& monitor);
     void HandleEvent(const SDL_Event& event, MonitorClient* monitor);
     void Poll(MonitorClient* monitor, uint32_t nowMs);
-    void Render(bool backendConnected, bool backendStarting, bool paused);
+    void Render(bool backendConnected, bool paused);
 
 private:
     void BuildDefaultPeripherals();
@@ -38,4 +38,3 @@ private:
     IGpioBackend* gpioBackend_ = nullptr;
     std::vector<std::unique_ptr<IPeripheral>> peripherals_;
 };
-

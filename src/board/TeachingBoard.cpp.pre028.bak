@@ -92,7 +92,7 @@ void TeachingBoard::Poll(MonitorClient* monitor, uint32_t nowMs)
     }
 }
 
-void TeachingBoard::Render(bool backendConnected, bool backendStarting, bool paused)
+void TeachingBoard::Render(bool backendConnected, bool paused)
 {
     SDL_SetRenderDrawColor(renderer_, 16, 19, 24, 255);
     SDL_RenderClear(renderer_);
@@ -108,11 +108,9 @@ void TeachingBoard::Render(bool backendConnected, bool backendStarting, bool pau
 
     SDL_Rect status{1079, 35, 18, 18};
     if(backendConnected) {
-        SDL_SetRenderDrawColor(renderer_, 77, 223, 122, 255);   // green
-    } else if(backendStarting) {
-        SDL_SetRenderDrawColor(renderer_, 245, 183, 66, 255);   // yellow
+        SDL_SetRenderDrawColor(renderer_, 77, 223, 122, 255);
     } else {
-        SDL_SetRenderDrawColor(renderer_, 232, 88, 88, 255);    // red
+        SDL_SetRenderDrawColor(renderer_, 232, 88, 88, 255);
     }
     SDL_RenderFillRect(renderer_, &status);
 
@@ -126,5 +124,4 @@ void TeachingBoard::Render(bool backendConnected, bool backendStarting, bool pau
 
     SDL_RenderPresent(renderer_);
 }
-
 
