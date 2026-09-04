@@ -10,14 +10,12 @@
 
 class MonitorClient;
 class IGpioBackend;
-class IOledBackend;
 class TeachingBoard {
 public:
     TeachingBoard() = default;
     ~TeachingBoard();
 
     void SetGpioBackend(IGpioBackend* backend) { gpioBackend_ = backend; }
-    void SetOledBackend(IOledBackend* backend) { oledBackend_ = backend; }
 
     bool Initialize(SDL_Renderer* renderer,
                     const std::filesystem::path& assetDir);
@@ -36,10 +34,8 @@ private:
     TextureCache textures_;
     std::filesystem::path assetDir_;
     IGpioBackend* gpioBackend_ = nullptr;
-    IOledBackend* oledBackend_ = nullptr;
 std::vector<std::unique_ptr<IPeripheral>> peripherals_;
 };
-
 
 
 

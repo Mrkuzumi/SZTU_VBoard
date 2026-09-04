@@ -22,6 +22,7 @@ struct ButtonBinding {
     bool activeLow;
     int x, y, w, h;
 };
+
 struct BoardConfig {
     static constexpr int WindowWidth = 1200;
     static constexpr int WindowHeight = 760;
@@ -42,7 +43,7 @@ struct BoardConfig {
     static constexpr std::uint32_t SysTickFrequencyHz = 8000000;
 
     static constexpr std::array<LedBinding, 4> LEDs{{
-        {"LED0 / PC13", "gpioPortB", 0, false,  188, 238},
+        {"LED0 / PC13", "gpioPortB", 0, true,  188, 238},
         {"LED1 / PA0",  "gpioPortB", 1, false, 188, 320},
         {"LED2 / PA1",  "gpioPortB", 2, false, 188, 402},
         {"LED3 / PA2",  "gpioPortB", 3, false, 188, 484},
@@ -51,12 +52,13 @@ struct BoardConfig {
     // Buttons remain GUI-local in Patch 021. They will use External Control
     // GPIO SET_STATE in the next input patch.
     static constexpr std::array<ButtonBinding, 4> Buttons{{
-        {"KEY0 / PB12", "gpioPortB", 12, true, 320, 604, 120, 58},
-        {"KEY1 / PB13", "gpioPortB", 13, true, 465, 604, 120, 58},
-        {"KEY2 / PB14", "gpioPortB", 14, true, 610, 604, 120, 58},
-        {"KEY3 / PB15", "gpioPortB", 15, true, 755, 604, 120, 58},
+        {"KEY0 / PB12", "gpioPortB", 12, true, 470, 604, 120, 58},
+        {"KEY1 / PB13", "gpioPortB", 13, true, 615, 604, 120, 58},
+        {"KEY2 / PB14", "gpioPortB", 14, true, 760, 604, 120, 58},
+        {"KEY3 / PB15", "gpioPortB", 15, true, 905, 604, 120, 58},
     }};
-static constexpr int OledX = 605;
+
+    static constexpr int OledX = 605;
     static constexpr int OledY = 165;
     static constexpr int OledW = 472;
     static constexpr int OledH = 310;
@@ -65,7 +67,5 @@ static constexpr int OledX = 605;
     static constexpr int OledScreenW = 384;
     static constexpr int OledScreenH = 192;
 };
-
-
 
 

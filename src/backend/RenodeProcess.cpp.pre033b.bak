@@ -49,7 +49,6 @@ std::wstring RenodeProcess::Quote(const std::filesystem::path& path)
 
 bool RenodeProcess::WriteRuntimeScript(
     const std::filesystem::path& elf,
-    const std::filesystem::path& appDir,
     const RenodeRuntimeOptions& options,
     std::string& error)
 {
@@ -74,29 +73,6 @@ bool RenodeProcess::WriteRuntimeScript(
     const auto overlay = runtimeDir / "vboard_runtime.repl";
     runtimeScript_ = runtimeDir / "runtime.resc";
 
-    const auto sourceBridge =
-        appDir / "renode" / "ssd1306_bridge_mem.py";
-    const auto runtimeBridge =
-        runtimeDir / "ssd1306_bridge_mem.py";
-
-    if(!std::filesystem::exists(sourceBridge)) {
-        error = "Missing SSD1306 bridge: " +
-                sourceBridge.u8string();
-        return false;
-    }
-
-    std::filesystem::copy_file(
-        sourceBridge,
-        runtimeBridge,
-        std::filesystem::copy_options::overwrite_existing,
-        ec
-    );
-
-    if(ec) {
-        error = "Cannot copy SSD1306 bridge into Renode runtime directory: " +
-                ec.message();
-        return false;
-    }
     // Proven Windows/Renode rule:
     // copy the ELF into Renode's working directory and use @firmware.elf.
     std::filesystem::copy_file(
@@ -146,12 +122,6 @@ bool RenodeProcess::WriteRuntimeScript(
     // Real Renode I2C target attached to STM32F103 I2C1.
     // Renode uses the 7-bit slave address here: 0x3C.
     repl << "ssd1306: Mocks.DummyI2CSlave @ i2c1 0x3C\n";
-    repl << "\n";
-    // Patch 033B5:
-    // Do NOT register another Memory.MappedMemory at 0x60000000.
-    // Renode's stock stm32f103.repl already maps fsmcBank1 there
-    // (0x60000000..0x6FFFFFFF). The OLED bridge reserves only the
-    // first 0x1000 bytes of that already-existing backing memory.
     repl.flush();
 
     if(!repl) {
@@ -177,6 +147,7 @@ bool RenodeProcess::WriteRuntimeScript(
     resc << "machine LoadPlatformDescription "
             "@vboard_runtime.repl\n";
     resc << "log \"VSTM32_STAGE_PLATFORM_LOADED\"\n";
+
     resc << "sysbus LoadELF @firmware.elf\n";
     resc << "log \"VSTM32_STAGE_ELF_LOADED\"\n";
 
@@ -188,9 +159,6 @@ bool RenodeProcess::WriteRuntimeScript(
     resc << "machine StartGdbServer "
          << options.gdbPort << "\n";
     resc << "log \"VSTM32_STAGE_GDB_STARTED\"\n";
-    // OLED scripting is deliberately non-boot-critical.
-    resc << "include @ssd1306_bridge_mem.py\n";
-    resc << "log \"VSTM32_STAGE_SSD1306_BRIDGE_LOADED\"\n";
 
     resc << "start\n";
     resc << "log \"VSTM32_STAGE_EMULATION_STARTED\"\n";
@@ -220,7 +188,7 @@ bool RenodeProcess::Start(
         return false;
     }
 
-    if(!WriteRuntimeScript(elf, appDir, options, error)) {
+    if(!WriteRuntimeScript(elf, options, error)) {
         return false;
     }
 
@@ -337,9 +305,5 @@ bool RenodeProcess::Running() const
            WaitForSingleObject(pi_.hProcess, 0) ==
                WAIT_TIMEOUT;
 }
-
-
-
-
 
 

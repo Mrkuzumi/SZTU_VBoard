@@ -1,6 +1,8 @@
 ﻿#include "app/App.h"
 
 #include "board/BoardConfig.h"
+#include "backend/MonitorClient.h"
+
 #include <windows.h>
 #include <utility>
 
@@ -109,7 +111,6 @@ bool App::Initialize()
     if(!renderer_) return false;
 
     board_.SetGpioBackend(&gpioBackend_);
-    board_.SetOledBackend(&gpioBackend_);
 
     if(!board_.Initialize(
         renderer_,
@@ -159,35 +160,67 @@ void App::Shutdown()
     SDL_Quit();
 }
 
-void App::ReloadFirmware()
+void App::ResetBoard()
 {
-    // Simulator/developer action, NOT a physical NRST model.
+    // A physical NRST button does not re-flash the firmware and should not
+    // rebuild the entire virtual board. Use Renode's machine Reset directly.
     //
-    // Reload the currently selected ELF by restarting the emulation backend.
-    // This is intentionally kept only as the keyboard-R convenience.
+    // Monitor is used only for this one-shot control operation; it is NOT
+    // used by the frame/render loop, so the old Telnet FPS issue does not
+    // return.
+    if(renode_.Running()) {
+        MonitorClient resetMonitor;
+
+        if(resetMonitor.Connect(
+               "127.0.0.1",
+               BoardConfig::MonitorPort,
+               3,
+               10)) {
+
+            const bool resetOk =
+                resetMonitor.Execute("machine Reset");
+
+            // Ensure execution resumes even if reset leaves the machine
+            // paused in a particular Renode state/version.
+            if(resetOk) {
+                resetMonitor.Execute("start");
+            }
+
+            resetMonitor.Disconnect();
+
+            if(resetOk) {
+                gpioBackend_.ResyncInputs();
+                paused_ = false;
+                SetWindowTitle(
+                    "RESET | GPIO API | GDB :3333"
+                );
+                return;
+            }
+        }
+    }
+
+    // Fallback only if the one-shot Monitor reset path is unavailable.
     gpioBackend_.Stop();
     renode_.Stop();
 
     std::string error;
-
     if(!StartBackend(error)) {
         renodeRunning_ = false;
 
         SDL_ShowSimpleMessageBox(
             SDL_MESSAGEBOX_ERROR,
-            "VirtualSTM32 - firmware reload failed",
+            "VirtualSTM32 - RESET failed",
             error.c_str(),
             window_
         );
 
-        SetWindowTitle("RELOAD FAILED");
+        SetWindowTitle("RESET FAILED");
         return;
     }
 
     paused_ = false;
-
     SetWindowTitle(
-        "RELOAD | GPIO API connecting | GDB :3333"
+        "RESET fallback | GPIO API connecting | GDB :3333"
     );
 }
 void App::HandleEvent(const SDL_Event& event)
@@ -201,7 +234,7 @@ void App::HandleEvent(const SDL_Event& event)
         if(event.key.keysym.sym == SDLK_ESCAPE) {
             running_ = false;
         } else if(event.key.keysym.sym == SDLK_r) {
-            ReloadFirmware();
+            ResetBoard();
         } else if(event.key.keysym.sym == SDLK_SPACE) {
             // Pause/continue is intentionally still deferred.
             // It will move to External Control instead of Telnet.
@@ -213,6 +246,11 @@ void App::HandleEvent(const SDL_Event& event)
 
     // Buttons remain GUI-local in Patch 021.
     board_.HandleEvent(event, nullptr);
+
+    if(board_.ConsumeResetRequest()) {
+        ResetBoard();
+        return;
+    }
 }
 
 int App::Run()
@@ -255,8 +293,5 @@ int App::Run()
 
     return 0;
 }
-
-
-
 
 

@@ -5,6 +5,7 @@
 #include "peripherals/IPeripheral.h"
 #include "peripherals/LedPeripheral.h"
 #include "peripherals/ButtonPeripheral.h"
+#include "peripherals/ResetButtonPeripheral.h"
 #include "peripherals/Ssd1306Peripheral.h"
 
 TeachingBoard::~TeachingBoard()
@@ -21,6 +22,14 @@ void TeachingBoard::BuildDefaultPeripherals()
             std::make_unique<LedPeripheral>(led, gpioBackend_)
         );
     }
+
+    {
+        auto reset = std::make_unique<ResetButtonPeripheral>(
+            BoardConfig::Reset
+        );
+        resetButton_ = reset.get();
+        peripherals_.push_back(std::move(reset));
+    }
     for(const auto& button : BoardConfig::Buttons) {
         peripherals_.push_back(
             std::make_unique<ButtonPeripheral>(
@@ -30,7 +39,7 @@ void TeachingBoard::BuildDefaultPeripherals()
         );
     }
 
-    peripherals_.push_back(std::make_unique<Ssd1306Peripheral>(oledBackend_));
+    peripherals_.push_back(std::make_unique<Ssd1306Peripheral>());
 }
 
 bool TeachingBoard::Initialize(SDL_Renderer* renderer,
@@ -56,7 +65,8 @@ bool TeachingBoard::Initialize(SDL_Renderer* renderer,
 
 void TeachingBoard::Shutdown()
 {
-peripherals_.clear();
+    resetButton_ = nullptr;
+    peripherals_.clear();
     background_ = nullptr;
     textures_.Clear();
     renderer_ = nullptr;
@@ -91,6 +101,11 @@ void TeachingBoard::Poll(MonitorClient* monitor, uint32_t nowMs)
     }
 }
 
+bool TeachingBoard::ConsumeResetRequest() noexcept
+{
+    return resetButton_ &&
+           resetButton_->ConsumeResetRequest();
+}
 void TeachingBoard::Render(bool backendConnected, bool backendStarting, bool paused)
 {
     SDL_SetRenderDrawColor(renderer_, 16, 19, 24, 255);
@@ -125,8 +140,6 @@ void TeachingBoard::Render(bool backendConnected, bool backendStarting, bool pau
 
     SDL_RenderPresent(renderer_);
 }
-
-
 
 
 

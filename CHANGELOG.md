@@ -40,3 +40,28 @@
 - Buttons are active-low: released=HIGH, pressed=LOW.
 - SDL input events only update atomics; socket I/O remains on the backend worker thread.
 - LED output observation from Patch 021 remains unchanged.
+
+## Patch 029 - Active-high LEDs, UI alignment and NRST
+- LED0..LED3 now use intuitive HIGH=ON / LOW=OFF semantics.
+- Corrected SSD1306 GND/VCC/SCL/SDA silkscreen alignment.
+- Reworked LED silkscreen into two-line LED/pin labels.
+- Added a dedicated RESET / NRST button left of KEY0.
+- RESET uses Renode machine Reset rather than reloading/restarting the whole emulator.
+- Current GUI button input levels are re-injected after reset.
+- Added reset_up.bmp and reset_down.bmp assets.
+
+## Patch 032 - Remove experimental NRST feature
+- Removed the on-board RESET/NRST button and all ResetButtonPeripheral code.
+- Removed experimental machine Reset / LoadELF reset paths and reset-only GPIO resync API.
+- Removed reset button assets and RESET silkscreen.
+- Recentered KEY0..KEY3 at x=320/465/610/755.
+- Kept keyboard R only as an explicitly simulator-level full firmware/backend reload.
+- Preserved HIGH=ON LED semantics, I2C/OLED label fixes, backend status colors and RUN alignment.
+
+## Patch 033B - Real SSD1306 framebuffer path
+- SSD1306 remains a real I2C1 target at 7-bit address 0x3C.
+- Added IronPython command/data parser using DummyI2CSlave.DataReceived.
+- Replaced oled.bin host file polling with Renode MappedMemory at 0x60000000.
+- External Control worker reads the framebuffer through sysbus and maintains a thread-safe cache.
+- SDL OLED renderer consumes only the non-blocking cache.
+- Added display on/off, normal/inverse, entire-display and common addressing command handling.

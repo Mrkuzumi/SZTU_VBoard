@@ -1,4 +1,4 @@
-﻿#include "peripherals/Ssd1306Peripheral.h"
+#include "peripherals/Ssd1306Peripheral.h"
 
 #include "board/BoardConfig.h"
 #include "ui/TextureCache.h"
@@ -30,20 +30,6 @@ bool Ssd1306Peripheral::Initialize(
         SDL_SetTextureScaleMode(
             pixelTexture_,
             SDL_ScaleModeNearest
-        );
-
-        // VSTM32_INITIAL_OLED_CLEAR
-        // Never display uninitialized streaming-texture memory while the
-        // Renode OLED backend is still starting.
-        std::array<std::uint32_t, 128 * 64> initialPixels{};
-
-        initialPixels.fill(0xFF06171Cu);
-
-        SDL_UpdateTexture(
-            pixelTexture_,
-            nullptr,
-            initialPixels.data(),
-            128 * static_cast<int>(sizeof(std::uint32_t))
         );
     }
 
@@ -138,4 +124,3 @@ void Ssd1306Peripheral::Render(SDL_Renderer* renderer)
         &screen
     );
 }
-

@@ -1,23 +1,13 @@
 #pragma once
-
 #include "peripherals/IPeripheral.h"
 #include "peripherals/OledFramebuffer.h"
 
-class IOledBackend;
-
 class Ssd1306Peripheral final : public IPeripheral {
 public:
-    explicit Ssd1306Peripheral(IOledBackend* backend = nullptr)
-        : framebuffer_(backend)
-    {
-    }
-
     ~Ssd1306Peripheral() override;
 
-    bool Initialize(SDL_Renderer* renderer,
-                    TextureCache& textures,
+    bool Initialize(SDL_Renderer* renderer, TextureCache& textures,
                     const std::filesystem::path& assetDir) override;
-
     void Poll(MonitorClient* monitor, uint32_t nowMs) override;
     void Render(SDL_Renderer* renderer) override;
 

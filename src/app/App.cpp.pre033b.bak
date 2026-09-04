@@ -109,7 +109,6 @@ bool App::Initialize()
     if(!renderer_) return false;
 
     board_.SetGpioBackend(&gpioBackend_);
-    board_.SetOledBackend(&gpioBackend_);
 
     if(!board_.Initialize(
         renderer_,
@@ -255,7 +254,6 @@ int App::Run()
 
     return 0;
 }
-
 
 
 

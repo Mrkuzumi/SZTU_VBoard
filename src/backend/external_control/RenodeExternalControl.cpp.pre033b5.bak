@@ -21,9 +21,6 @@ constexpr std::uint8_t kAccessDoubleWord = 4;
 constexpr std::uint64_t kGpioA_Crl = 0x40010800ull;
 constexpr std::uint64_t kGpioC_Crh = 0x40011004ull;
 
-// VSTM32 OLED mailbox inside stock STM32F103 fsmcBank1.
-// The base platform already owns 0x60000000..0x6FFFFFFF.
-// We reserve only 0x60000000..0x60000FFF for simulator-internal state.
 constexpr std::uint64_t kOledFramebufferBase = 0x60000000ull;
 constexpr std::uint64_t kOledGenerationAddress = 0x60000404ull;
 constexpr std::uint64_t kOledFlagsAddress = 0x60000408ull;
@@ -1053,7 +1050,6 @@ void RenodeExternalControl::WorkerMain()
 
     WSACleanup();
 }
-
 
 
 

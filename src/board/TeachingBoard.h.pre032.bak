@@ -10,14 +10,14 @@
 
 class MonitorClient;
 class IGpioBackend;
-class IOledBackend;
+class ResetButtonPeripheral;
+
 class TeachingBoard {
 public:
     TeachingBoard() = default;
     ~TeachingBoard();
 
     void SetGpioBackend(IGpioBackend* backend) { gpioBackend_ = backend; }
-    void SetOledBackend(IOledBackend* backend) { oledBackend_ = backend; }
 
     bool Initialize(SDL_Renderer* renderer,
                     const std::filesystem::path& assetDir);
@@ -28,6 +28,9 @@ public:
     void HandleEvent(const SDL_Event& event, MonitorClient* monitor);
     void Poll(MonitorClient* monitor, uint32_t nowMs);
     void Render(bool backendConnected, bool backendStarting, bool paused);
+
+    bool ConsumeResetRequest() noexcept;
+
 private:
     void BuildDefaultPeripherals();
 
@@ -36,10 +39,8 @@ private:
     TextureCache textures_;
     std::filesystem::path assetDir_;
     IGpioBackend* gpioBackend_ = nullptr;
-    IOledBackend* oledBackend_ = nullptr;
-std::vector<std::unique_ptr<IPeripheral>> peripherals_;
+    ResetButtonPeripheral* resetButton_ = nullptr;
+    std::vector<std::unique_ptr<IPeripheral>> peripherals_;
 };
-
-
 
 

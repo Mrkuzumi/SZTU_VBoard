@@ -1,28 +1,49 @@
 #include "peripherals/OledFramebuffer.h"
-#include <windows.h>
-#include <fstream>
 
-OledFramebuffer::OledFramebuffer()
+#include "backend/oled/IOledBackend.h"
+
+OledFramebuffer::OledFramebuffer(IOledBackend* backend)
+    : backend_(backend)
 {
-    char temp[MAX_PATH]{};
-    GetTempPathA(MAX_PATH, temp);
-    filePath_ = std::filesystem::path(temp) / "VirtualSTM32" / "oled.bin";
+}
+
+void OledFramebuffer::SetBackend(IOledBackend* backend) noexcept
+{
+    backend_ = backend;
 }
 
 bool OledFramebuffer::Poll()
 {
-    std::error_code ec;
-    if(!std::filesystem::exists(filePath_, ec)) return false;
-    auto wt = std::filesystem::last_write_time(filePath_, ec);
-    if(ec) return false;
-    if(hasTimestamp_ && wt == lastWrite_) return false;
+    if(!backend_) {
+        return false;
+    }
 
-    std::ifstream f(filePath_, std::ios::binary);
-    if(!f) return false;
-    f.read(reinterpret_cast<char*>(data_.data()), static_cast<std::streamsize>(data_.size()));
-    if(f.gcount() != static_cast<std::streamsize>(data_.size())) return false;
+    std::array<std::uint8_t, 1024> next{};
+    std::uint32_t nextGeneration = generation_;
+    bool nextDisplayOn = displayOn_;
+    bool nextInverse = inverse_;
+    bool nextAllOn = allOn_;
 
-    lastWrite_ = wt;
-    hasTimestamp_ = true;
-    return true;
+    if(!backend_->TryCopyOledFrame(
+           next,
+           nextGeneration,
+           nextDisplayOn,
+           nextInverse,
+           nextAllOn)) {
+        return false;
+    }
+
+    const bool changed =
+        nextGeneration != generation_ ||
+        nextDisplayOn != displayOn_ ||
+        nextInverse != inverse_ ||
+        nextAllOn != allOn_;
+
+    data_ = next;
+    generation_ = nextGeneration;
+    displayOn_ = nextDisplayOn;
+    inverse_ = nextInverse;
+    allOn_ = nextAllOn;
+
+    return changed;
 }

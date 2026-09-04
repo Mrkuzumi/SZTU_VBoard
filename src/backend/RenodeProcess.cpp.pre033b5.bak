@@ -147,11 +147,8 @@ bool RenodeProcess::WriteRuntimeScript(
     // Renode uses the 7-bit slave address here: 0x3C.
     repl << "ssd1306: Mocks.DummyI2CSlave @ i2c1 0x3C\n";
     repl << "\n";
-    // Patch 033B5:
-    // Do NOT register another Memory.MappedMemory at 0x60000000.
-    // Renode's stock stm32f103.repl already maps fsmcBank1 there
-    // (0x60000000..0x6FFFFFFF). The OLED bridge reserves only the
-    // first 0x1000 bytes of that already-existing backing memory.
+    repl << "oledFramebuffer: Memory.MappedMemory @ sysbus 0x60000000\n";
+    repl << "    size: 0x1000\n";
     repl.flush();
 
     if(!repl) {
@@ -177,7 +174,7 @@ bool RenodeProcess::WriteRuntimeScript(
     resc << "machine LoadPlatformDescription "
             "@vboard_runtime.repl\n";
     resc << "log \"VSTM32_STAGE_PLATFORM_LOADED\"\n";
-    resc << "sysbus LoadELF @firmware.elf\n";
+resc << "sysbus LoadELF @firmware.elf\n";
     resc << "log \"VSTM32_STAGE_ELF_LOADED\"\n";
 
     resc << "emulation CreateExternalControlServer "
@@ -337,8 +334,6 @@ bool RenodeProcess::Running() const
            WaitForSingleObject(pi_.hProcess, 0) ==
                WAIT_TIMEOUT;
 }
-
-
 
 
 

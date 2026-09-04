@@ -1,6 +1,7 @@
 ﻿#include "app/App.h"
 
 #include "board/BoardConfig.h"
+
 #include <windows.h>
 #include <utility>
 
@@ -109,7 +110,6 @@ bool App::Initialize()
     if(!renderer_) return false;
 
     board_.SetGpioBackend(&gpioBackend_);
-    board_.SetOledBackend(&gpioBackend_);
 
     if(!board_.Initialize(
         renderer_,
@@ -159,37 +159,32 @@ void App::Shutdown()
     SDL_Quit();
 }
 
-void App::ReloadFirmware()
+void App::ResetBoard()
 {
-    // Simulator/developer action, NOT a physical NRST model.
-    //
-    // Reload the currently selected ELF by restarting the emulation backend.
-    // This is intentionally kept only as the keyboard-R convenience.
     gpioBackend_.Stop();
     renode_.Stop();
 
     std::string error;
-
     if(!StartBackend(error)) {
         renodeRunning_ = false;
 
         SDL_ShowSimpleMessageBox(
             SDL_MESSAGEBOX_ERROR,
-            "VirtualSTM32 - firmware reload failed",
+            "VirtualSTM32 - Reset failed",
             error.c_str(),
             window_
         );
 
-        SetWindowTitle("RELOAD FAILED");
+        SetWindowTitle("RESET FAILED");
         return;
     }
 
     paused_ = false;
-
     SetWindowTitle(
-        "RELOAD | GPIO API connecting | GDB :3333"
+        "RESET | GPIO API connecting | GDB :3333"
     );
 }
+
 void App::HandleEvent(const SDL_Event& event)
 {
     if(event.type == SDL_QUIT) {
@@ -201,7 +196,7 @@ void App::HandleEvent(const SDL_Event& event)
         if(event.key.keysym.sym == SDLK_ESCAPE) {
             running_ = false;
         } else if(event.key.keysym.sym == SDLK_r) {
-            ReloadFirmware();
+            ResetBoard();
         } else if(event.key.keysym.sym == SDLK_SPACE) {
             // Pause/continue is intentionally still deferred.
             // It will move to External Control instead of Telnet.
@@ -255,8 +250,4 @@ int App::Run()
 
     return 0;
 }
-
-
-
-
 

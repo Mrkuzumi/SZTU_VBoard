@@ -20,7 +20,7 @@ private:
     bool Initialize();
     void Shutdown();
     void HandleEvent(const SDL_Event& event);
-    void ReloadFirmware();
+    void ResetBoard();
 
     bool StartBackend(std::string& error);
 
@@ -43,4 +43,3 @@ private:
     bool renodeRunning_ = false;
     bool lastGpioConnected_ = false;
 };
-

@@ -37,11 +37,9 @@ private:
     static std::wstring Quote(const std::filesystem::path& path);
 
     bool WriteRuntimeScript(const std::filesystem::path& elf,
-                            const std::filesystem::path& appDir,
                             const RenodeRuntimeOptions& options,
                             std::string& error);
 
     PROCESS_INFORMATION pi_{};
     std::filesystem::path runtimeScript_;
 };
-

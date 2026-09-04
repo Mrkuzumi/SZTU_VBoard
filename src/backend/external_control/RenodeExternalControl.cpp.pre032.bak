@@ -21,17 +21,6 @@ constexpr std::uint8_t kAccessDoubleWord = 4;
 constexpr std::uint64_t kGpioA_Crl = 0x40010800ull;
 constexpr std::uint64_t kGpioC_Crh = 0x40011004ull;
 
-// VSTM32 OLED mailbox inside stock STM32F103 fsmcBank1.
-// The base platform already owns 0x60000000..0x6FFFFFFF.
-// We reserve only 0x60000000..0x60000FFF for simulator-internal state.
-constexpr std::uint64_t kOledFramebufferBase = 0x60000000ull;
-constexpr std::uint64_t kOledGenerationAddress = 0x60000404ull;
-constexpr std::uint64_t kOledFlagsAddress = 0x60000408ull;
-
-constexpr std::uint32_t kOledFlagDisplayOn = 0x01u;
-constexpr std::uint32_t kOledFlagInverse = 0x02u;
-constexpr std::uint32_t kOledFlagAllOn = 0x04u;
-
 constexpr std::uint8_t kRcCommandFailed = 0;
 constexpr std::uint8_t kRcFatalError = 1;
 constexpr std::uint8_t kRcInvalidCommand = 2;
@@ -469,32 +458,6 @@ bool ReadSysbusDword(SOCKET socketHandle,
     return true;
 }
 
-bool ReadSysbusDwords(
-    SOCKET socketHandle,
-    std::int32_t sysbusDescriptor,
-    std::uint64_t address,
-    std::uint32_t count,
-    Bytes& response)
-{
-    Bytes payload;
-
-    AppendI32(payload, sysbusDescriptor);
-    payload.push_back(kSysbusRead);
-    payload.push_back(kAccessDoubleWord);
-    AppendU64(payload, address);
-    AppendU32(payload, count);
-
-    if(!InvokeCommand(
-           socketHandle,
-           kCmdSystemBus,
-           payload,
-           response)) {
-        return false;
-    }
-
-    return response.size() ==
-           static_cast<std::size_t>(count) * 4u;
-}
 bool IsOutputMode(std::uint32_t configRegister, unsigned nibbleIndex)
 {
     // STM32F1 CRL/CRH pin field = CNF[1:0] + MODE[1:0].
@@ -766,28 +729,19 @@ bool RenodeExternalControl::QueueWrite(
     return true;
 }
 
-bool RenodeExternalControl::TryCopyOledFrame(
-    std::array<std::uint8_t, 1024>& frame,
-    std::uint32_t& generation,
-    bool& displayOn,
-    bool& inverse,
-    bool& allOn) const noexcept
+void RenodeExternalControl::ResyncInputs() noexcept
 {
-    if(!connected_.load() || !oledAvailable_.load()) {
-        return false;
+    // Keep each key's current physical/GUI state, but force it to be
+    // transmitted again because machine Reset resets the STM32 GPIO model.
+    for(auto& dirty : buttonDirty_) {
+        dirty.store(true);
     }
 
-    {
-        std::lock_guard<std::mutex> lock(oledMutex_);
-        frame = oledFrame_;
+    // Prevent stale LED states from being rendered during the few worker
+    // iterations immediately following reset.
+    for(auto& valid : gpioBMirrorValid_) {
+        valid.store(false);
     }
-
-    generation = oledGeneration_.load();
-    displayOn = oledDisplayOn_.load();
-    inverse = oledInverse_.load();
-    allOn = oledAllOn_.load();
-
-    return true;
 }
 void RenodeExternalControl::WorkerMain()
 {
@@ -881,8 +835,6 @@ void RenodeExternalControl::WorkerMain()
         }
 
         connected_.store(true);
-        std::uint32_t lastOledGeneration = 0xFFFFFFFFu;
-        oledAvailable_.store(false);
 
         while(!stopRequested_.load() &&
               connectionHealthy) {
@@ -965,67 +917,6 @@ void RenodeExternalControl::WorkerMain()
                 ].store(state);
             }
 
-            // ---------------------------------------------------------
-            // VSTM32 OLED framebuffer poll
-            //
-            // Renode's IronPython SSD1306 parser writes a generation
-            // counter + 1024-byte framebuffer into mapped memory.
-            // We read 1024B in ONE External Control sysbus command only
-            // when the generation changes.
-            // ---------------------------------------------------------
-            std::uint32_t oledGeneration = 0;
-            std::uint32_t oledFlags = 0;
-
-            if(!ReadSysbusDword(
-                   socketHandle,
-                   sysbusDescriptor,
-                   kOledGenerationAddress,
-                   oledGeneration) ||
-               !ReadSysbusDword(
-                   socketHandle,
-                   sysbusDescriptor,
-                   kOledFlagsAddress,
-                   oledFlags)) {
-                connectionHealthy = false;
-                break;
-            }
-
-            if(oledGeneration != lastOledGeneration) {
-                Bytes oledBytes;
-
-                if(!ReadSysbusDwords(
-                       socketHandle,
-                       sysbusDescriptor,
-                       kOledFramebufferBase,
-                       256,
-                       oledBytes)) {
-                    connectionHealthy = false;
-                    break;
-                }
-
-                {
-                    std::lock_guard<std::mutex> lock(oledMutex_);
-                    std::copy(
-                        oledBytes.begin(),
-                        oledBytes.begin() + 1024,
-                        oledFrame_.begin()
-                    );
-                }
-
-                oledGeneration_.store(oledGeneration);
-                oledDisplayOn_.store(
-                    (oledFlags & kOledFlagDisplayOn) != 0
-                );
-                oledInverse_.store(
-                    (oledFlags & kOledFlagInverse) != 0
-                );
-                oledAllOn_.store(
-                    (oledFlags & kOledFlagAllOn) != 0
-                );
-
-                lastOledGeneration = oledGeneration;
-                oledAvailable_.store(true);
-            }
             if(connectionHealthy) {
                 // SDL never blocks here; only this worker sleeps/does I/O.
                 std::this_thread::sleep_for(
@@ -1034,7 +925,6 @@ void RenodeExternalControl::WorkerMain()
             }
         }
 
-        oledAvailable_.store(false);
         connected_.store(false);
 
         shutdown(
@@ -1053,8 +943,5 @@ void RenodeExternalControl::WorkerMain()
 
     WSACleanup();
 }
-
-
-
 
 

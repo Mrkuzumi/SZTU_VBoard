@@ -1,16 +1,14 @@
 ﻿#pragma once
 
 #include "backend/gpio/IGpioBackend.h"
-#include "backend/oled/IOledBackend.h"
 
 #include <array>
 #include <atomic>
 #include <cstdint>
-#include <mutex>
 #include <string>
 #include <thread>
 
-class RenodeExternalControl final : public IGpioBackend, public IOledBackend {
+class RenodeExternalControl final : public IGpioBackend {
 public:
     RenodeExternalControl();
     ~RenodeExternalControl() override;
@@ -31,12 +29,6 @@ bool IsConnected() const noexcept override;
                     int pin,
                     bool state) noexcept override;
 
-    bool TryCopyOledFrame(
-        std::array<std::uint8_t, 1024>& frame,
-        std::uint32_t& generation,
-        bool& displayOn,
-        bool& inverse,
-        bool& allOn) const noexcept override;
 private:
     void WorkerMain();
 
@@ -56,18 +48,8 @@ private:
     std::array<std::atomic<bool>, 4> buttonDesiredStates_{};
     std::array<std::atomic<bool>, 4> buttonDirty_{};
 
-    mutable std::mutex oledMutex_;
-    std::array<std::uint8_t, 1024> oledFrame_{};
-
-    std::atomic<std::uint32_t> oledGeneration_{0};
-    std::atomic<bool> oledAvailable_{false};
-    std::atomic<bool> oledDisplayOn_{false};
-    std::atomic<bool> oledInverse_{false};
-    std::atomic<bool> oledAllOn_{false};
-
     std::thread worker_;
 };
-
 
 
 
