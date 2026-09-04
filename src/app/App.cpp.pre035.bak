@@ -74,21 +74,6 @@ bool App::StartBackend(std::string& error)
 
 bool App::Initialize()
 {
-    // Patch 035: only the newest VirtualSTM32 copy is allowed to run.
-    // A second launch asks the old GUI to shut down and waits until its
-    // Patch-034 Renode Job Object has been cleaned up.
-    std::string instanceError;
-
-    if(!singleInstance_.AcquireOrReplaceExisting(instanceError)) {
-        MessageBoxA(
-            nullptr,
-            instanceError.c_str(),
-            "VirtualSTM32 - Cannot replace previous instance",
-            MB_OK | MB_ICONERROR
-        );
-        return false;
-    }
-
     appDir_ = ExecutableDir();
 
     if(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) {
@@ -235,13 +220,6 @@ int App::Run()
     if(!Initialize()) return 2;
 
     while(running_) {
-        // A newly-launched VirtualSTM32 has requested ownership.
-        // Leave the normal run loop so App::~App() executes Shutdown().
-        if(singleInstance_.ReplacementRequested()) {
-            running_ = false;
-            break;
-        }
-
         SDL_Event event{};
         while(SDL_PollEvent(&event)) {
             HandleEvent(event);
@@ -277,7 +255,6 @@ int App::Run()
 
     return 0;
 }
-
 
 
 

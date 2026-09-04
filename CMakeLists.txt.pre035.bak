@@ -21,7 +21,6 @@ add_executable(VirtualSTM32 WIN32
     src/app/App.cpp
     src/backend/MonitorClient.cpp
     src/backend/RenodeProcess.cpp
-    src/platform/windows/SingleInstanceGuard.cpp
     src/backend/external_control/RenodeExternalControl.cpp
     src/board/TeachingBoard.cpp
     src/peripherals/LedPeripheral.cpp
@@ -46,7 +45,6 @@ add_custom_command(TARGET VirtualSTM32 POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/renode" "$<TARGET_FILE_DIR:VirtualSTM32>/renode"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:SDL2::SDL2>" "$<TARGET_FILE_DIR:VirtualSTM32>"
 )
-
 
 
 

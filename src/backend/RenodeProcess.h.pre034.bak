@@ -41,13 +41,7 @@ private:
                             const RenodeRuntimeOptions& options,
                             std::string& error);
 
-    // Windows Job Object owns the complete Renode process tree.
-    // JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE guarantees cleanup even if
-    // VirtualSTM32 exits abnormally.
-    HANDLE job_ = nullptr;
-
     PROCESS_INFORMATION pi_{};
     std::filesystem::path runtimeScript_;
 };
-
 

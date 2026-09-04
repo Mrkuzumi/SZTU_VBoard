@@ -271,60 +271,13 @@ bool RenodeProcess::Start(
     const std::wstring workingDirectory =
         runtimeDir.wstring();
 
-    // ---------------------------------------------------------------
-    // Patch 034:
-    // Own Renode and all of its descendants with a Windows Job Object.
-    //
-    // KILL_ON_JOB_CLOSE is the important part:
-    // if VirtualSTM32 closes normally OR crashes/gets terminated,
-    // Windows closes this process's job handle and kills the complete
-    // Renode process tree automatically.
-    // ---------------------------------------------------------------
-    job_ = CreateJobObjectW(nullptr, nullptr);
-
-    if(!job_) {
-        const DWORD windowsError = GetLastError();
-
-        CloseHandle(logHandle);
-
-        error =
-            "CreateJobObjectW failed. Windows error=" +
-            std::to_string(windowsError);
-
-        return false;
-    }
-
-    JOBOBJECT_EXTENDED_LIMIT_INFORMATION jobInfo{};
-    jobInfo.BasicLimitInformation.LimitFlags =
-        JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-
-    if(!SetInformationJobObject(
-           job_,
-           JobObjectExtendedLimitInformation,
-           &jobInfo,
-           sizeof(jobInfo))) {
-
-        const DWORD windowsError = GetLastError();
-
-        CloseHandle(job_);
-        job_ = nullptr;
-
-        CloseHandle(logHandle);
-
-        error =
-            "SetInformationJobObject failed. Windows error=" +
-            std::to_string(windowsError);
-
-        return false;
-    }
-
     const BOOL ok = CreateProcessW(
         nullptr,
         mutableCommand.data(),
         nullptr,
         nullptr,
         TRUE,
-        CREATE_NO_WINDOW | CREATE_SUSPENDED,
+        CREATE_NO_WINDOW,
         nullptr,
         workingDirectory.c_str(),
         &si,
@@ -339,57 +292,10 @@ bool RenodeProcess::Start(
             std::to_string(GetLastError()) +
             "\nStartup log: " + startupLog.u8string();
 
-        
-        // Patch 034 create-process failure cleanup.
-        if(job_) {
-            CloseHandle(job_);
-            job_ = nullptr;
-        }
-ZeroMemory(&pi_, sizeof(pi_));
-        return false;
-    }
-
-    // Attach while the process is still suspended. This guarantees that
-    // Renode cannot spawn descendants before entering our Job Object.
-    if(!AssignProcessToJobObject(job_, pi_.hProcess)) {
-        const DWORD windowsError = GetLastError();
-
-        TerminateProcess(pi_.hProcess, 1);
-        WaitForSingleObject(pi_.hProcess, 1000);
-
-        CloseHandle(pi_.hThread);
-        CloseHandle(pi_.hProcess);
         ZeroMemory(&pi_, sizeof(pi_));
-
-        CloseHandle(job_);
-        job_ = nullptr;
-
-        error =
-            "AssignProcessToJobObject failed. Windows error=" +
-            std::to_string(windowsError);
-
         return false;
     }
 
-    if(ResumeThread(pi_.hThread) == static_cast<DWORD>(-1)) {
-        const DWORD windowsError = GetLastError();
-
-        TerminateJobObject(job_, 1);
-        WaitForSingleObject(pi_.hProcess, 1000);
-
-        CloseHandle(pi_.hThread);
-        CloseHandle(pi_.hProcess);
-        ZeroMemory(&pi_, sizeof(pi_));
-
-        CloseHandle(job_);
-        job_ = nullptr;
-
-        error =
-            "ResumeThread(Renode) failed. Windows error=" +
-            std::to_string(windowsError);
-
-        return false;
-    }
     // Only detect immediate process launch failures.
     if(WaitForSingleObject(pi_.hProcess, 250) != WAIT_TIMEOUT) {
         DWORD exitCode = 0;
@@ -412,37 +318,17 @@ ZeroMemory(&pi_, sizeof(pi_));
 
 void RenodeProcess::Stop()
 {
-    // Prefer terminating the Job Object because it owns the complete
-    // Renode process tree, not only the direct renode.exe process.
-    if(job_) {
-        TerminateJobObject(job_, 0);
-    }
-    else if(pi_.hProcess &&
-            WaitForSingleObject(pi_.hProcess, 0) == WAIT_TIMEOUT) {
-        // Compatibility fallback for a process created before the Job
-        // Object was available.
+    if(!pi_.hProcess) return;
+
+    if(WaitForSingleObject(pi_.hProcess, 0) ==
+       WAIT_TIMEOUT) {
         TerminateProcess(pi_.hProcess, 0);
+        WaitForSingleObject(pi_.hProcess, 1000);
     }
 
-    if(pi_.hProcess) {
-        WaitForSingleObject(pi_.hProcess, 1500);
-    }
-
-    if(pi_.hThread) {
-        CloseHandle(pi_.hThread);
-    }
-
-    if(pi_.hProcess) {
-        CloseHandle(pi_.hProcess);
-    }
-
+    CloseHandle(pi_.hThread);
+    CloseHandle(pi_.hProcess);
     ZeroMemory(&pi_, sizeof(pi_));
-
-    // Closing a KILL_ON_JOB_CLOSE job handle is also the final safety net.
-    if(job_) {
-        CloseHandle(job_);
-        job_ = nullptr;
-    }
 }
 
 bool RenodeProcess::Running() const
@@ -451,7 +337,6 @@ bool RenodeProcess::Running() const
            WaitForSingleObject(pi_.hProcess, 0) ==
                WAIT_TIMEOUT;
 }
-
 
 
 

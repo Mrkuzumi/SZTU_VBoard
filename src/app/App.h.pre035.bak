@@ -1,7 +1,6 @@
 ﻿#pragma once
 
 #include "backend/RenodeProcess.h"
-#include "platform/windows/SingleInstanceGuard.h"
 #include "backend/external_control/RenodeExternalControl.h"
 #include "board/TeachingBoard.h"
 
@@ -39,16 +38,9 @@ private:
     TeachingBoard board_;
     RenodeProcess renode_;
 
-    // Declared after RenodeProcess so its destructor runs first.
-    // App::~App() performs Shutdown(), then this guard releases the mutex.
-    // The replacement process therefore cannot continue until Renode cleanup
-    // has completed.
-    SingleInstanceGuard singleInstance_;
-
     bool running_ = true;
     bool paused_ = false;
     bool renodeRunning_ = false;
     bool lastGpioConnected_ = false;
 };
-
 
