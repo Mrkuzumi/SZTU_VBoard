@@ -1,8 +1,73 @@
+# ============================================================
+# VirtualSTM32F103C8T6
+# Keep the repository source-only and small.
+# ============================================================
+
+# Build output / CMake caches
 /build/
-/third_party/
+/out/
+/cmake-build-*/
+/CMakeFiles/
+/CMakeCache.txt
+/cmake_install.cmake
+/_deps/
+*.obj
+*.o
+*.pdb
+*.ilk
+*.idb
+*.tlog
+*.lastbuildstate
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.sln
+
+# Visual Studio / IDE
+/.vs/
 .vscode/
 .idea/
-*.user
 *.suo
+*.user
 *.VC.db
+*.VC.opendb
+
+# Large third-party runtime.
+# Renode is installed into %LOCALAPPDATA%\VirtualSTM32 instead.
+/third_party/renode/
+
+# Runtime / local generated files
+/runtime/
+/dist/
+*.log
+
+# Development patch history / temporary downloads
 /Download/
+/_dev_history/
+*.pre*.bak
+*.bak
+*.orig
+*.rej
+
+# Local archives
+/*.zip
+/*.rar
+/*.7z
+
+# Keep only the formal public tools.
+# Local diagnostic scripts can stay on disk but are not committed.
+/tools/*
+!/tools/setup.ps1
+!/tools/setup_runtime.ps1
+!/tools/run.ps1
+!/tools/build.ps1
+!/tools/repo_slim.ps1
+
+# Only the currently required Renode-side bridge belongs in the repo.
+/renode/*
+!/renode/ssd1306_bridge_mem.py
+
+# OS junk
+Thumbs.db
+Desktop.ini
+.DS_Store

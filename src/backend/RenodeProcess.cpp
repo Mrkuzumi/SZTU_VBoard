@@ -26,6 +26,21 @@ std::filesystem::path RenodeProcess::FindRenode(
         if(std::filesystem::exists(path)) return path;
     }
 
+    // Shared lightweight runtime cache.
+    // Large Renode files live outside the Git repository.
+    if(const wchar_t* localAppData = _wgetenv(L"LOCALAPPDATA")) {
+        const auto cached =
+            std::filesystem::path(localAppData) /
+            "VirtualSTM32" /
+            "renode" /
+            "1.16.1" /
+            "renode.exe";
+
+        if(std::filesystem::exists(cached)) {
+            return cached;
+        }
+    }
+
     std::filesystem::path cursor = appDir;
     for(int i = 0; i < 4; ++i) {
         const auto portable =
@@ -451,6 +466,7 @@ bool RenodeProcess::Running() const
            WaitForSingleObject(pi_.hProcess, 0) ==
                WAIT_TIMEOUT;
 }
+
 
 
 

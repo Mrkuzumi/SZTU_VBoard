@@ -1,4 +1,4 @@
-#include "app/App.h"
+﻿#include "app/App.h"
 #include <SDL.h>
 #include <windows.h>
 #include <shellapi.h>
@@ -9,7 +9,7 @@ static void Usage()
 {
     MessageBoxA(nullptr,
         "Usage:\n  VirtualSTM32.exe --elf <firmware.elf> [--renode <renode.exe>]\n\n"
-        "Keyboard:\n  Space = Run/Pause\n  R = Reset\n  Esc = Exit",
+        "Keyboard:\n  R = Reload firmware\n  Esc = Exit",
         "VirtualSTM32F103C8T6", MB_OK | MB_ICONINFORMATION);
 }
 
@@ -29,3 +29,4 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
     if(elf.empty()) { Usage(); return 1; }
     return App(std::filesystem::absolute(elf), renode).Run();
 }
+

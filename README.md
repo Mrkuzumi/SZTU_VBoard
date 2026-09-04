@@ -1,212 +1,507 @@
-# VirtualSTM32F103C8T6 V0.1.1 (Windows MVP)
+# VirtualSTM32F103C8T6
 
-![V0.1.1 teaching board preview](docs/board_preview.png)
+一个面向 STM32 入门与教学的 Windows 虚拟开发板。
 
-一个受 NVBoard 思路启发的 **STM32F103C8T6 虚拟教学开发板**。目标不是让用户改写程序去“适配模拟器”，而是让 CubeIDE / Keil5 正常编译 STM32 HAL 工程，生成 ELF/AXF 后自动弹出一块虚拟板，并运行同一份固件。
+项目使用 **Renode** 执行真实的 STM32F103C8T6 ELF/AXF 固件，使用 **SDL2** 绘制开发板界面。用户程序中的 GPIO、I2C 等操作会经过 Renode 的 MCU/外设模型，再反映到虚拟 LED、按键和 OLED 上，而不是在 GUI 中写死行为。
 
-## V0.1.1 已实现的板级功能
+## 当前支持
 
-- MCU：STM32F103 系列 Cortex-M3，后端使用 Renode `stm32f103.repl`
-- GPIO 输出：4 个固定 LED
-  - LED0 = PC13，低电平点亮（符合常见 F103 板习惯）
-  - LED1 = PA0，高电平点亮
-  - LED2 = PA1，高电平点亮
-  - LED3 = PA2，高电平点亮
-- GPIO 输入：4 个按键，全部低电平按下
-  - KEY0 = PB12
-  - KEY1 = PB13
-  - KEY2 = PB14
-  - KEY3 = PB15
-- OLED：SSD1306 128x64、I2C1、7-bit 地址 0x3C
-  - 使用 Renode `DummyI2CSlave` 接收 HAL I2C1 外设写事务
-  - IronPython 解析常见 SSD1306 命令/显存写入
-  - GUI 动态显示 128x64 framebuffer
-- Windows GUI：SDL2 + BMP 贴图
-- 运行控制：Space 暂停/继续，R 复位，Esc 退出
-- 预留调试：Renode GDB Server 默认尝试开放 `localhost:3333`
+| 功能 | 状态 |
+|---|---|
+| MCU | STM32F103C8T6 |
+| 固件 | `.elf` / `.axf` |
+| GPIO 输出 | PC13、PA0、PA1、PA2 |
+| GPIO 输入 | PB12、PB13、PB14、PB15 |
+| SSD1306 | 128×64，I2C1，地址 `0x3C` |
+| STM32 HAL | GPIO；I2C 轮询方式已验证 |
+| GDB Server | `127.0.0.1:3333` |
+| Windows GUI | SDL2 |
+| 后端 | Renode 1.16.1 |
+| 多开策略 | 后启动实例替换先启动实例 |
 
-> V0.1.1 的重点是把“HAL 固件 -> Renode -> GPIO/I2C -> 虚拟贴图板”完整跑通。它不是 STM32F103 的 100% 周期精确硬件替代品。
+### 板载引脚
 
-## 目录
+| 虚拟外设 | STM32 引脚 | 逻辑 |
+|---|---|---|
+| LED0 | PC13 | HIGH = ON |
+| LED1 | PA0 | HIGH = ON |
+| LED2 | PA1 | HIGH = ON |
+| LED3 | PA2 | HIGH = ON |
+| KEY0 | PB12 | 按下 = LOW |
+| KEY1 | PB13 | 按下 = LOW |
+| KEY2 | PB14 | 按下 = LOW |
+| KEY3 | PB15 | 按下 = LOW |
+| OLED SCL | PB6 / I2C1_SCL | 100 kHz 推荐 |
+| OLED SDA | PB7 / I2C1_SDA | SSD1306 `0x3C` |
+
+> KEY0~KEY3 建议在 CubeMX 中配置为 `GPIO_Input + Pull-up`。
+
+---
+
+# 快速开始
+
+## 方法 A：普通使用者——推荐
+
+普通使用者**不需要安装 Visual Studio、CMake、Python、SDL2 开发包或单独的 .NET SDK**。
+
+需要的只有：
+
+1. 一个已经编译好的 STM32F103 `.elf` 或 `.axf`
+2. 本项目的 Windows Release
+3. 第一次使用时下载一次 Renode portable runtime
+
+下载项目 Release 后，在目录中执行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\setup_runtime.ps1
+```
+
+该脚本会把 Renode 安装到：
+
+```text
+%LOCALAPPDATA%\VirtualSTM32\renode\1.16.1
+```
+
+Renode **不会放进本项目目录，也不会提交到 Git**。
+
+然后运行固件：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\run.ps1 `
+  "D:\STM32_Project\Debug\firmware.elf"
+```
+
+Keil 生成的 AXF 也可以：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\run.ps1 `
+  "D:\Keil_Project\Objects\firmware.axf"
+```
+
+---
+
+## 方法 B：从 GitHub clone 后直接使用
+
+```powershell
+git clone <your-repository-url>
+cd VirtualSTM32F103C8T6
+```
+
+执行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\setup.ps1
+```
+
+`setup.ps1` 会：
+
+1. 安装/复用本机缓存的 Renode runtime；
+2. 优先使用本机已经编译好的 `VirtualSTM32.exe`；
+3. 如果本地没有可执行文件，则从当前 GitHub 仓库的 **Latest Release** 下载预编译 Windows 版本；
+4. 所有大型运行时与构建缓存均放在 `%LOCALAPPDATA%\VirtualSTM32`，不会污染 Git 仓库。
+
+之后：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\run.ps1 `
+  "D:\STM32_Project\Debug\firmware.elf"
+```
+
+---
+
+# STM32CubeIDE 使用
+
+在 CubeIDE 中正常创建 STM32F103C8T6 工程并编译即可。
+
+虚拟板**不要求固件必须是 Debug 或 Release**，只需要把实际生成的 ELF 路径传给启动器。
+
+例如：
+
+```text
+MyProject\
+├─ Debug\
+│  └─ MyProject.elf
+└─ Release\
+   └─ MyProject.elf
+```
+
+如果当前 CubeIDE Build Configuration 是 Debug：
+
+```powershell
+.\tools\run.ps1 "D:\MyProject\Debug\MyProject.elf"
+```
+
+如果切换为 Release：
+
+```powershell
+.\tools\run.ps1 "D:\MyProject\Release\MyProject.elf"
+```
+
+不要把 `Debug` / `Release` 路径写死在工程中。
+
+---
+
+# Keil 使用
+
+Keil MDK 通常生成 ELF 格式的 `.axf`：
+
+```text
+Objects\ProjectName.axf
+```
+
+直接传入即可：
+
+```powershell
+.\tools\run.ps1 "D:\KeilProject\Objects\ProjectName.axf"
+```
+
+---
+
+# HAL 示例
+
+## LED
+
+PC13 配置为推挽输出后：
+
+```c
+HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);   // LED0 ON
+HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET); // LED0 OFF
+HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
+```
+
+## 按键
+
+KEY0 为 PB12，低电平按下：
+
+```c
+if (HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_12) == GPIO_PIN_RESET)
+{
+    // KEY0 pressed
+}
+```
+
+推荐使用下降沿检测或“按下后等待松开”，不要在按住期间连续 Toggle。
+
+## SSD1306
+
+CubeMX：
+
+```text
+I2C1
+PB6 = I2C1_SCL
+PB7 = I2C1_SDA
+100 kHz
+7-bit
+```
+
+HAL 地址：
+
+```c
+#define SSD1306_ADDR (0x3C << 1)
+```
+
+当前已验证：
+
+```c
+HAL_I2C_IsDeviceReady(...)
+HAL_I2C_Master_Transmit(...)
+```
+
+常规的“初始化 SSD1306 + 写 1024 字节 framebuffer”的 HAL 轮询式驱动可以使用。
+
+DMA / Interrupt I2C 路径目前不作为已验证功能保证。
+
+---
+
+# GUI 状态
+
+右上角 BACKEND 指示灯：
+
+| 颜色 | 含义 |
+|---|---|
+| 黄 | Renode / External Control 正在启动 |
+| 绿 | 后端已经连接 |
+| 红 | 后端不可用 |
+
+快捷键：
+
+```text
+R    重新加载当前固件
+Esc  退出虚拟板
+```
+
+关闭 GUI 时，VirtualSTM32 会清理它启动的 Renode 进程树。
+
+再次启动新的 VirtualSTM32 时，旧实例会自动退出，新的实例接管后端，避免 `3333 / 33334 / 33335` 被旧实例占用。
+
+---
+
+# 工作原理
+
+```text
+STM32 ELF / AXF
+      │
+      ▼
+    Renode
+ STM32F103C8T6
+      │
+      ├── GPIO output ──> External Control ──> LED
+      │
+      ├── GUI KEY ──────> External Control ──> GPIO input
+      │
+      └── I2C1 ─────────> SSD1306 bridge ───> OLED framebuffer
+                                             │
+                                             ▼
+                                            SDL2
+```
+
+GUI 不直接模拟用户程序逻辑。
+
+例如：
+
+```text
+HAL_GPIO_ReadPin(PB12)
+```
+
+读取的是 Renode 中的 GPIO 输入状态；
+
+```text
+HAL_GPIO_WritePin(PC13)
+```
+
+改变的是 Renode 中的 GPIO 输出，再由 GUI 读取并显示。
+
+OLED 同理：
+
+```text
+HAL_I2C_Master_Transmit
+        ↓
+Renode I2C1
+        ↓
+SSD1306 @ 0x3C
+        ↓
+128×64 framebuffer
+        ↓
+SDL2
+```
+
+---
+
+# 仓库结构
+
+正式仓库只保留源码、资源和必要脚本：
 
 ```text
 VirtualSTM32F103C8T6/
+├─ .github/
+│  └─ workflows/
+│     └─ windows-release.yml
+├─ assets/
+│  ├─ board.bmp
+│  ├─ led_*.bmp
+│  ├─ button_*.bmp
+│  └─ oled_module.bmp
+├─ renode/
+│  └─ ssd1306_bridge_mem.py
 ├─ src/
-│  ├─ app/               应用生命周期（不放具体外设逻辑）
-│  ├─ backend/           Renode 进程与 Monitor 通信
-│  ├─ board/             教学板组合与引脚配置
-│  ├─ peripherals/       IPeripheral + LED/按键/SSD1306 模块
-│  └─ ui/                SDL2 贴图缓存
-├─ assets/               板卡、LED、按键、OLED 模块 BMP 贴图
-├─ renode/               SSD1306 I2C -> framebuffer bridge
-├─ tools/                构建、环境诊断、IDE 接入脚本
-│  └─ patches/           可重复执行的版本修复/迁移脚本
-├─ docs/                 架构、IDE 配置、限制说明
-└─ examples/             HAL 配置/测试代码片段
+│  ├─ main.cpp
+│  ├─ app/
+│  ├─ backend/
+│  ├─ board/
+│  ├─ peripherals/
+│  ├─ platform/
+│  └─ ui/
+├─ tools/
+│  ├─ setup.ps1
+│  ├─ setup_runtime.ps1
+│  ├─ run.ps1
+│  ├─ build.ps1
+│  └─ repo_slim.ps1
+├─ CMakeLists.txt
+├─ .gitignore
+└─ README.md
 ```
 
-## V0.1.1 重要修复：NMake / `-A x64`
-
-V0.1.0 的 `build_windows.ps1` 没有显式指定 Visual Studio Generator。如果用户环境变量或 CMake 默认 Generator 是 `NMake Makefiles`，同时脚本传入 `-A x64`，CMake 会报：
+以下内容**不进入 Git 仓库**：
 
 ```text
-NMake Makefiles does not support platform specification x64
+build/
+third_party/renode/
+.vs/
+CMake 缓存
+SDL2 FetchContent 构建缓存
+旧 patch / diagnostic 脚本
+*.preXXX.bak
+Download/
+Renode portable runtime
 ```
 
-V0.1.1 已改为自动检测并显式选择 `Visual Studio 18 2026` 或 `Visual Studio 17 2022`，同时会清理使用了错误 Generator 的旧 `build/` 缓存。
+---
 
-老 V0.1.0 工程也可运行：
+# 为什么仓库可以保持很小
+
+本项目采用“**源码仓库轻量化，运行时按需缓存**”方案。
+
+## Renode
+
+Renode 是最大的运行依赖，但不需要放进仓库。
+
+首次执行：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\patches\001_fix_cmake_generator.ps1
+.\tools\setup_runtime.ps1
 ```
 
-然后重新运行 `tools\build_windows.ps1`。
-
-## 模块化约束
-
-所有新外设优先实现 `src/peripherals/IPeripheral.h`。`App` 只负责窗口、Renode 生命周期以及事件分发，不再直接保存 LED/按键/OLED 状态。新增蜂鸣器、UART、SPI 屏等时，原则上新增外设类并在 `TeachingBoard` 注册，不把逻辑继续堆回 `App.cpp`。详见 `docs/ARCHITECTURE.md` 与 `docs/DEVELOPMENT.md`。
-
-## 1. 准备环境
-
-需要：
-
-1. Windows 10/11 x64
-2. Visual Studio / Build Tools 的 **Desktop development with C++**（脚本优先支持 VS 2026，其次 VS 2022）
-3. CMake；若只安装 Visual Studio 2026，需要 CMake 4.2+ 才识别 `Visual Studio 18 2026` 生成器
-4. 网络（第一次 CMake 配置会下载 SDL2 2.32.10）
-5. Renode 1.16.1 Windows portable（`setup_renode.ps1` 自动下载并校验 SHA256）
-
-先检查环境：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\doctor.ps1
-```
-
-首次安装推荐一条命令完成 Renode + 编译：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\setup_all.ps1
-```
-
-也可以只下载 Renode：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\setup_renode.ps1
-```
-
-脚本会放到：
+后，Renode 缓存到：
 
 ```text
-third_party\renode\renode.exe
+%LOCALAPPDATA%\VirtualSTM32\renode\1.16.1
 ```
 
-## 2. 构建
+多个 clone 可以共用这一份。
+
+## SDL2
+
+普通用户使用 Release 中附带的 `SDL2.dll`，不需要安装 SDL2。
+
+只有修改 VirtualSTM32 本身、从源码编译时，CMake 才会通过 `FetchContent` 获取 SDL2 源码。
+
+## 构建目录
+
+开发者构建默认使用：
+
+```text
+%LOCALAPPDATA%\VirtualSTM32\build\
+```
+
+而不是仓库里的 `build/`。
+
+因此 CMake、MSVC、SDL2 的中间文件不会让 Git 工作区膨胀。
+
+---
+
+# 从源码开发 VirtualSTM32
+
+这一部分只面向修改虚拟板本身的开发者。
+
+普通使用者不需要安装这些东西。
+
+要求：
+
+- Windows 10 / 11 x64
+- CMake 3.22+
+- Visual Studio 2022 Build Tools 或 Visual Studio 2022
+- `Desktop development with C++`
+
+SDL2 不需要手动安装。
+
+执行：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\tools\build_windows.ps1
+powershell -ExecutionPolicy Bypass -File .\tools\build.ps1
 ```
 
-完成后：
+默认构建目录：
 
 ```text
-build\Release\VirtualSTM32.exe
+%LOCALAPPDATA%\VirtualSTM32\build\VirtualSTM32F103C8T6
 ```
 
-资源和 SDL2.dll 会由 CMake 自动复制到 EXE 旁边。
-
-## 3. 手动运行一个 STM32 ELF
+构建完成后可直接：
 
 ```powershell
-.\build\Release\VirtualSTM32.exe --elf "D:\STM32\MyProject\Debug\MyProject.elf"
+.\tools\run.ps1 "D:\firmware.elf"
 ```
 
-也接受 Keil 常见 `.axf`：
+---
+
+# 发布
+
+仓库中的 GitHub Actions 会在 Windows Runner 上自动构建 Release。
+
+建议发布流程：
+
+```text
+git tag v0.x.x
+git push origin v0.x.x
+```
+
+Tag 构建会生成：
+
+```text
+VirtualSTM32-windows-x64.zip
+```
+
+Release 包只包含 VirtualSTM32、SDL2 运行库、GUI assets 和必要的 Renode bridge。
+
+**不会把 100+ MB 的 Renode runtime 塞进 Release 或 Git 历史。**
+
+Renode 由 `setup_runtime.ps1` 单独下载并缓存。
+
+---
+
+# 清理现有大工程目录
+
+先预览：
 
 ```powershell
-.\build\Release\VirtualSTM32.exe "D:\Keil\Project\Objects\project.axf"
+powershell -ExecutionPolicy Bypass -File .\tools\repo_slim.ps1
 ```
 
-## 4. CubeIDE：编译完成自动弹出虚拟板
+确认后执行：
 
-推荐使用 `makefile.targets`，因为 CubeIDE 会提供 `BUILD_ARTIFACT` 等构建产物宏。
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\repo_slim.ps1 `
+  -Apply `
+  -MoveRenodeToCache
+```
 
-1. 将 `tools/cubeide_makefile.targets.example` 复制到你的 STM32 工程根目录
-2. 改名为 `makefile.targets`
-3. 修改其中 `VSTM32_ROOT`
-4. 正常 Build/Run
+它会清理：
 
-成功链接 ELF 后会执行 `tools/ide_launch.cmd`：旧虚拟板被关闭，新固件像“重新烧录实体开发板”一样立即启动。
+- 仓库内 `build/`
+- `.vs/`
+- 旧 `*.preXXX.bak`
+- 已废弃的重复源码
+- 已废弃的旧 Renode bridge
+- 顶层重复 bridge 文件
 
-如果你只想在某个配置中启用，也可在 Project Properties -> C/C++ Build -> Settings -> Build Steps 中调用 `ide_launch.cmd`。
-
-## 5. Keil5：Build/Rebuild 完成自动弹出
-
-进入：
-
-`Options for Target -> User -> After Build/Rebuild`
-
-添加：
+并把项目内已经存在的：
 
 ```text
-"C:\Tools\VirtualSTM32F103C8T6\tools\ide_launch.cmd" "#L"
+third_party\renode
 ```
 
-具体见 `tools/keil_after_build_example.txt`。
-
-## 6. CubeMX/HAL 建议配置
-
-### GPIO
-
-- PC13：GPIO_Output
-- PA0/PA1/PA2：GPIO_Output
-- PB12/PB13/PB14/PB15：GPIO_Input + Pull-up（或外部上拉语义）
-
-### I2C1
-
-- PB6 = I2C1_SCL
-- PB7 = I2C1_SDA
-- 常规 100kHz/400kHz 均可，仿真不依赖真实上升沿模拟
-
-SSD1306 地址：
-
-```c
-#define SSD1306_I2C_ADDR (0x3C << 1)   // HAL API 常用 8-bit address 参数 = 0x78
-```
-
-OLED bridge 已支持常见初始化/寻址命令以及 1024-byte framebuffer 更新。最稳妥的 V0.1 写法是硬件 I2C，不要先用 GPIO bit-bang 软件 I2C。
-
-## 7. 键盘/鼠标
-
-- 鼠标按住 KEY：对应 PB12~PB15 = 0
-- 鼠标松开 KEY：对应 GPIO = 1
-- `Space`：Pause / Run
-- `R`：Reset
-- `Esc`：Exit
-
-## 8. 调试预留
-
-程序启动后会 best-effort 执行：
+移动到：
 
 ```text
-machine StartGdbServer 3333
+%LOCALAPPDATA%\VirtualSTM32\renode\1.16.1
 ```
 
-因此后续可以把 CubeIDE/arm-none-eabi-gdb 接到：
+这样既不会重新下载，也不会继续占用仓库目录。
 
-```text
-localhost:3333
-```
+---
 
-V0.1 GUI 尚未实现断点/单步窗口，但后端接口和生命周期已经预留。
+# 当前限制
 
-## 9. 已知限制
+- 目前正式目标平台为 Windows x64。
+- MCU 当前固定为 STM32F103C8T6。
+- OLED 当前重点验证的是 SSD1306 + I2C1 + HAL 轮询式驱动。
+- GDB Server 已提供，但 CubeIDE / Keil “点击 Download 后自动启动虚拟板”的一键集成仍属于后续功能。
+- UART、SPI、ADC 等外设还没有纳入当前正式板卡。
 
-见 `docs/LIMITATIONS.md` 和 `docs/VALIDATION.md`。最重要的两点：
+---
 
-1. Renode 当前 STM32F103 通用 platform 并不严格按 C8T6 的 64KB Flash / 20KB SRAM 做容量越界约束；V0.1 首先追求 HAL 兼容链路。
-2. 某些非常依赖 RCC/Flash latency/精确外设时序的 HAL 工程可能需要补 Renode platform model；GPIO + SysTick/HAL_Delay + I2C1 是本 MVP 的优先验证范围。
+# 第三方项目
 
-## License
+VirtualSTM32 使用：
 
-本项目代码可按 MIT 使用。`Renode` 自身为 MIT；`SDL2` 使用 zlib license。它们由各自上游项目维护，本仓库不包含 Renode 二进制。
+- Renode — Antmicro，MIT License
+- SDL2 — zlib License
+
+Renode 官方项目：
+
+https://github.com/renode/renode
+
+SDL：
+
+https://www.libsdl.org/

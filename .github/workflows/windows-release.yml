@@ -1,0 +1,67 @@
+name: Windows Release
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure
+        shell: pwsh
+        run: |
+          cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+
+      - name: Build
+        shell: pwsh
+        run: |
+          cmake --build build --config Release
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $items = @(
+            "build\Release\VirtualSTM32.exe",
+            "build\Release\SDL2.dll",
+            "build\Release\assets",
+            "build\Release\renode",
+            "tools\setup_runtime.ps1",
+            "tools\run.ps1",
+            "README.md"
+          )
+
+          foreach($item in $items) {
+            if(!(Test-Path $item)) {
+              throw "Release item missing: $item"
+            }
+          }
+
+          Compress-Archive `
+            -Path $items `
+            -DestinationPath "VirtualSTM32-windows-x64.zip" `
+            -Force
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: VirtualSTM32-windows-x64
+          path: VirtualSTM32-windows-x64.zip
+
+      - name: Publish GitHub Release asset
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: VirtualSTM32-windows-x64.zip
