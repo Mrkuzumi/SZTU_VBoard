@@ -48,7 +48,7 @@ SZTU_VBoard 是一个基于 **Renode + SDL2** 的 Windows 虚拟 STM32F103C8T6 �
 ## 1. 克隆仓库
 
 ```powershell
-git clone <repository-url>
+git clone https://github.com/Mrkuzumi/SZTU_VBoard.git
 cd SZTU_VBoard
 ```
 
