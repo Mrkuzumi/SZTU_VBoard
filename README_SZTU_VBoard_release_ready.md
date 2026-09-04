@@ -6,6 +6,8 @@ SZTU_VBoard 是一个基于 **Renode + SDL2** 的 Windows 虚拟 STM32F103C8T6 �
 
 > 适合 STM32 HAL 学习、基础外设实验，以及没有实体开发板时的程序验证。
 
+![GUI](./tools/GUI.png)
+
 ---
 
 ## 当前支持
