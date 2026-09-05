@@ -1,6 +1,6 @@
 # SZTU_VBoard
 
-SZTU_VBoard 是一个基于 **Renode + SDL2** 的 Windows 虚拟 STM32F103C8T6 开发板。
+SZTU_VBoard 是一个基于 **Renode + SDL2** 的**Windows**虚拟 STM32F103C8T6 开发板。
 
 它可以直接运行 STM32 工程生成的 `.elf` / `.axf` 固件，并在虚拟开发板界面中显示 GPIO、按键和 SSD1306 OLED 的实际运行结果。
 
@@ -63,6 +63,9 @@ powershell -ExecutionPolicy Bypass -File .\tools\setup_runtime.ps1
 ```
 
 该脚本会自动准备 Renode 运行环境，之后无需重复下载。
+
+>[!TIP]
+>强烈建议设置好代理，否则可能无法下载Renode资源
 
 然后运行 STM32 固件：
 
